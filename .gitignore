@@ -1,0 +1,7 @@
+*.root
+*.csv
+*.log
+*.png
+*.pdf
+__pycache__/
+.venv/
