@@ -1,4 +1,6 @@
 uproot
+awkward
 numpy
 pandas
+pyarrow
 matplotlib
