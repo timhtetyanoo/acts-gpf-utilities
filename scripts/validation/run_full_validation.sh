@@ -12,6 +12,7 @@
 #   GPF_SCORES       csv the scores are collected in   (default: ${GPF_OUT_DIR}/scores.csv)
 #   GPF_PLOT_DIR     directory of the figures          (default: ${GPF_OUT_DIR}/plots)
 #   GPF_MIN_SHARED   geometry ids a match requires     (default: 3)
+#   GPF_REPO_OUT     small artifacts copied here       (default: <this repo>/gpf_validation)
 #   PYTHON           python interpreter                (default: python3)
 
 set -Eeuo pipefail
@@ -70,6 +71,24 @@ done
 "${python}" "${script_dir}/plot_performance.py" --scores "${scores}" \
   --patterns "${out_dir}"/patterns_*.root --output-dir "${plot_dir}"
 
+# --- 5. copy the small artifacts into this repo ----------------------------
+# Truth parquets stay in ${out_dir}: they are large and regenerable.
+repo_root="$(cd -- "${script_dir}/../.." && pwd)"
+repo_out="${GPF_REPO_OUT:-${repo_root}/gpf_validation}"
+mkdir -p -- "${repo_out}/plots" "${repo_out}/logs"
+cp -f -- "${scores}" "${repo_out}/scores.csv"
+shopt -s nullglob
+for f in "${out_dir}"/patterns_*.root; do
+  cp -f -- "${f}" "${repo_out}/"
+done
+for f in "${plot_dir}"/*; do
+  [[ -f "${f}" ]] && cp -f -- "${f}" "${repo_out}/plots/"
+done
+for f in "${out_dir}"/logs/*; do
+  [[ -f "${f}" ]] && cp -f -- "${f}" "${repo_out}/logs/"
+done
+
 echo
 echo "Scores:  ${scores}"
 echo "Figures: ${plot_dir}"
+echo "Copied:  ${repo_out}"

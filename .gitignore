@@ -3,5 +3,14 @@
 *.log
 *.png
 *.pdf
+*.parquet
 __pycache__/
 .venv/
+
+# Small validation artifacts copied here for transfer off this machine
+!gpf_validation/
+!gpf_validation/**/
+!gpf_validation/*.csv
+!gpf_validation/*.root
+!gpf_validation/plots/*.png
+!gpf_validation/logs/*.log
