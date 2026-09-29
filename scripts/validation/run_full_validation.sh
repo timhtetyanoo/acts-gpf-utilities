@@ -18,8 +18,8 @@
 #   GPF_PLOT_DIR     directory of the figures          (default: ${GPF_OUT_DIR}/plots)
 #   GPF_SAMPLES      samples to process                (default: "PG0 PG200")
 #   GPF_IMPLEMENTATIONS                                (default: "cpu")
-#   GPF_MIN_COMPLETENESS  precision hits a match needs (default: 0.5)
-#   GPF_MIN_STATIONS      stations a match needs       (default: 2)
+#   GPF_MATCHING_RATIO    ACTS's matchingRatio         (default: 0.5)
+#   GPF_MIN_STATIONS      chambers a match needs       (default: 2)
 #   GPF_DISPLAY_EVENTS    events drawn per case        (default: 5)
 #   GPF_REPO_OUT     small artifacts copied here       (default: <this repo>/gpf_validation)
 #   PYTHON           python interpreter                (default: <this repo>/.venv/bin/python)
@@ -62,7 +62,9 @@ else
   echo "ACTS_BUILD_DIR is unset, using the pattern files already in ${out_dir}"
 fi
 
-# --- 2. the surfaces of the tracking geometry, needed by the displays -------
+# --- 2. the surfaces of the tracking geometry, for the event displays only --
+# The tables and the metrics need no geometry: the hits and the truth lines are
+# both given in the frame of their spectrometer sector.
 if [[ -f "${surfaces}" && "${GPF_FORCE:-0}" != "1" ]]; then
   echo "Surface cache already built, skipping"
 else
@@ -79,8 +81,7 @@ for sample in "${samples[@]}"; do
       continue
     fi
     "${python}" "${script_dir}/build_validation_tables.py" \
-      "${out_dir}/patterns_${tag}.root" "$(ntuple_for "${sample}")" "${tables}" \
-      --surfaces "${surfaces}"
+      "${out_dir}/patterns_${tag}.root" "$(ntuple_for "${sample}")" "${tables}"
   done
 done
 
@@ -91,7 +92,7 @@ for sample in "${samples[@]}"; do
     tag="${sample}_${implementation}"
     "${python}" "${script_dir}/compute_metrics.py" "${out_dir}/tables_${tag}" \
       --sample "${sample}" --implementation "${implementation}" \
-      --min-completeness "${GPF_MIN_COMPLETENESS:-0.5}" \
+      --matching-ratio "${GPF_MATCHING_RATIO:-0.5}" \
       --min-stations "${GPF_MIN_STATIONS:-2}" \
       --scan --output "${scores}" | tee -- "${out_dir}/logs/metrics_${tag}.log"
   done

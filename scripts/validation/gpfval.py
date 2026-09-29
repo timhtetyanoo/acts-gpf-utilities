@@ -15,33 +15,12 @@ import numpy as np
 # Examples/Framework/src/EventData/MuonSpacePoint.cpp.
 
 #: Technology field, MuonSpacePoint::MuonId::TechField
-MDT, RPC, TGC, STGC, MM = 0, 2, 3, 4, 5
-
-#: Station names in the order of MuonSpacePoint::MuonId::StationName. Athena's
-#: Muon::MuonStationIndex::ChIndex numbers its first fifteen entries the same
-#: way, so `Segments_chamberIdx` of the truth tree indexes this list as well.
-STATION_NAMES = [
-    "BIS", "BIL", "BMS", "BML", "BOS", "BOL", "BEE",
-    "EIS", "EIL", "EMS", "EML", "EOS", "EOL", "EES", "EEL",
-]
+#: Only the tube technology is needed: a straw's residual has its drift
+#: radius subtracted, everything else is measured where it was recorded
+MDT = 0
 
 #: Stations in the order of Muon::MuonStationIndex::StIndex
 STATIONS = ["BI", "BM", "BO", "BE", "EI", "EM", "EO", "EE"]
-
-#: Station name -> station, from toStationIndex() in
-#: Examples/Algorithms/TrackFinding/src/GlobalPatternFinderDefs.cpp
-_STATION_OF_NAME = np.array(
-    [0, 0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6, 7, 7], dtype=np.int8
-)
-
-
-def station_of_name(station_name):
-    """Station index of a station name, both as the enums number them."""
-    name = np.asarray(station_name, dtype=np.int64)
-    out = np.full(name.shape, -1, dtype=np.int8)
-    valid = (name >= 0) & (name < len(_STATION_OF_NAME))
-    out[valid] = _STATION_OF_NAME[name[valid]]
-    return out
 
 
 def decode_muon_id(raw):
@@ -64,52 +43,6 @@ def decode_muon_id(raw):
     }
 
 
-def is_precision(technology, measures_eta, measures_phi):
-    """Precision hit, as the example algorithm defines it.
-
-    Transcribed from isPrecisionHit() in GlobalPatternFinderDefs.cpp. It differs
-    from Athena's MuonR4::isPrecisionHit for sTGC, where the export does not
-    carry the channel type: an sTGC space point counts as precision only when it
-    measures eta alone, so an sTGC strip that also measures phi is counted as a
-    trigger hit here and as a precision hit in Athena.
-    """
-    return (
-        (technology == MDT)
-        | (technology == MM)
-        | ((technology == STGC) & measures_eta & ~measures_phi)
-    )
-
-
-#: Measurement classes of MuonFastRecoTester's `measType`, used to order the
-#: hits; the counters themselves are not exclusive, see hit_classes()
-PREC, TRIG, PHI = 0, 1, 2
-
-
-def measurement_type(technology, measures_eta, measures_phi):
-    """Precision / trigger-eta / phi-only of a hit.
-
-    The split of fillSpacePointInfo() in MuonFastRecoTester.cxx: precision when
-    isPrecisionHit() holds, otherwise a trigger hit when it measures eta,
-    otherwise a phi-only hit. fillTruthInfo() walks the hits in this order so
-    that a precision hit claims a layer before a trigger hit of the same layer
-    does, which is why it is kept here.
-    """
-    prec = is_precision(technology, measures_eta, measures_phi)
-    return np.where(prec, PREC, np.where(measures_eta, TRIG, PHI)).astype(np.int8)
-
-
-def hit_classes(technology, measures_eta, measures_phi):
-    """The three counters a hit contributes to, which are not exclusive.
-
-    updatePatHitInfo() and processMeas() in MuonFastRecoTester.cxx count a hit
-    as precision or as trigger when it measures eta, and count it as a phi hit
-    whenever it measures phi. A space point measuring both therefore appears in
-    an eta counter and in the phi counter at once.
-    """
-    prec = is_precision(technology, measures_eta, measures_phi)
-    return (measures_eta & prec, measures_eta & ~prec, measures_phi)
-
-
 # --- the event numbering -----------------------------------------------------
 def reader_event_numbers(file, tree_name="MuonSpacePoints"):
     """Map an event_id onto the event number the reader hands the algorithm.
@@ -126,11 +59,6 @@ def reader_event_numbers(file, tree_name="MuonSpacePoints"):
 
 
 # --- angles ------------------------------------------------------------------
-
-
-def wrap_pi(angle):
-    """Fold an angle difference into [-pi, pi)."""
-    return (np.asarray(angle) + np.pi) % (2.0 * np.pi) - np.pi
 
 
 def eta_of_theta(theta):

@@ -1,26 +1,22 @@
 #!/usr/bin/env python3
-"""Turn the validation tables into the performance numbers.
+"""Turn the validation tables into the five numbers, applying the definitions.
 
-Everything the pattern finder produced is already in the tables written by
-build_validation_tables.py; this script only applies a definition to them.
-MuonFastRecoTester stops before this point on purpose, so the definition used
-here is ours and is stated explicitly:
+The tables produced by build_validation_tables.py only count. Every definition
+lives here, so a definition can be changed and re-applied in a second without
+running the pattern finder again. What each test means and why it is built this
+way is in docs/validation.md; this file is only the arithmetic.
 
-    a pattern belongs to the muon that owns the most of its hits, the majority
-    rule of fillGlobPatternInfo(). The pattern counts as a match of that muon
-    when it collected at least `--min-completeness` of the muon's findable
-    precision hits and has hits of the muon in at least `--min-stations`
-    stations. The second requirement mirrors the `minGroups` of the finder: a
-    pattern that lives in a single station is not a muon candidate.
+    1  efficiency          found muons / all truth muons
+    2  composition         purity, mismatched fraction, selectivity
+    3  hits on the path    mean squared pull against the truth line
+    4  fakes & duplicates  patterns matching nothing, muons matched twice
+    5  direction           the pattern's eta and phi against the muon's
 
-    efficiency   muons with at least one matching pattern
-    duplicates   matching patterns beyond the first, per muon
-    fakes        patterns that match no muon
-    purity       hits of the main muon over all hits, per pattern
-    completeness precision hits of the main muon over its findable ones
-
-`--scan` prints the efficiency and the fake fraction over a range of
-completeness thresholds, so the effect of the choice is visible.
+The matching criterion is ACTS's, from TrackTruthMatcher: a pattern matches a
+muon when it holds a majority of that muon's findable surfaces *and* a majority
+of its own hits are that muon's, both at 0.5, which is `matchingRatio` with
+`doubleMatching` enabled. Requiring both is what stops a pattern that swept up a
+whole chamber from counting as having found the muon it caught on the way.
 """
 
 from __future__ import annotations
@@ -32,100 +28,122 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+#: ACTS's matchingRatio, used on both sides of the match
+MATCHING_RATIO = 0.5
+#: A pattern confined to one chamber is not a muon candidate
+MIN_STATIONS = 2
+
 
 def load(tables: Path) -> dict[str, pd.DataFrame]:
-    names = ["muons", "muon_station", "segments",
-             "patterns", "pattern_station", "matches"]
-    return {name: pd.read_parquet(tables / f"{name}.parquet") for name in names}
+    return {name: pd.read_parquet(tables / f"{name}.parquet")
+            for name in ("muons", "patterns", "pattern_chamber")}
 
 
-def summarise(data: dict[str, pd.DataFrame]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Reduce the per station tables to one row per pattern and per muon."""
-    station = data["pattern_station"]
-    per_pattern = station.groupby(["event", "pattern"]).agg(
-        nPrec=("nPrec", "sum"), nTrig=("nTrig", "sum"), nPhi=("nPhi", "sum"),
-        nTruthPrec=("nTruthPrec", "sum"), nTruthTrig=("nTruthTrig", "sum"),
-        nTruthPhi=("nTruthPhi", "sum"),
-        nMisTruthPrec=("nMisTruthPrec", "sum"),
-        nStationsWithTruth=("nTruthPrec", lambda c: int((c > 0).sum())),
-    ).reset_index()
-
-    patterns = data["patterns"].merge(per_pattern, on=["event", "pattern"], how="left")
-    patterns["nHitCounts"] = patterns[["nPrec", "nTrig", "nPhi"]].sum(axis=1)
-    patterns["nTruthCounts"] = patterns[
-        ["nTruthPrec", "nTruthTrig", "nTruthPhi"]].sum(axis=1)
-    patterns["purity"] = np.where(
-        patterns["nHitCounts"] > 0,
-        patterns["nTruthCounts"] / patterns["nHitCounts"].replace(0, np.nan), np.nan)
-
-    findable = data["muon_station"].groupby(["event", "muon"]).agg(
-        genPrec=("nPrec", "sum"), genTrig=("nTrig", "sum"), genPhi=("nPhi", "sum"),
-        genStations=("nPrec", "size")).reset_index()
-    muons = data["muons"].merge(findable, on=["event", "muon"], how="left")
-    muons[["genPrec", "genTrig", "genPhi", "genStations"]] = muons[
-        ["genPrec", "genTrig", "genPhi", "genStations"]].fillna(0).astype(int)
-
-    patterns = patterns.merge(
-        findable.rename(columns={"muon": "mainMuon"}),
+def derive(data: dict[str, pd.DataFrame], matching_ratio: float,
+           min_stations: int):
+    """Add the fractions and the match flags to the pattern and muon tables."""
+    muons = data["muons"].copy()
+    patterns = data["patterns"].merge(
+        muons[["event", "muon", "findable"]].rename(columns={"muon": "mainMuon"}),
         on=["event", "mainMuon"], how="left")
-    patterns["completeness"] = np.where(
-        patterns["genPrec"].fillna(0) > 0,
-        patterns["nTruthPrec"] / patterns["genPrec"].replace(0, np.nan), np.nan)
-    return patterns, muons
 
+    def ratio(numerator, denominator):
+        return np.where(denominator > 0,
+                        numerator / denominator.replace(0, np.nan), np.nan)
 
-def classify(patterns: pd.DataFrame, muons: pd.DataFrame,
-             min_completeness: float, min_stations: int):
-    """Flag every pattern as matching or fake and every muon as found or not."""
-    patterns = patterns.copy()
+    # test 1 and test 2, all from counts already in the table
+    patterns["completeness"] = ratio(patterns["shared"],
+                                     patterns["findable"].fillna(0))
+    patterns["purity"] = ratio(patterns["nHitsMainMuon"], patterns["nHits"])
+    patterns["mismatched"] = ratio(patterns["nHitsOtherMuon"], patterns["nHits"])
+    patterns["selectivity"] = ratio(patterns["nHits"], patterns["nAvailable"])
+
+    # test 3, summarised per pattern over the chambers it crossed
+    chamber = data["pattern_chamber"]
+    if len(chamber):
+        per_pattern = chamber.groupby(["event", "pattern"]).apply(
+            lambda g: pd.Series({
+                "meanSqPull": np.average(
+                    g["meanSqPull"].fillna(0), weights=g["nHitsPulled"])
+                if g["nHitsPulled"].sum() else np.nan,
+                "nHitsNoSegment": int(g["nHitsNoSegment"].sum()),
+            }), include_groups=False).reset_index()
+        patterns = patterns.merge(per_pattern, on=["event", "pattern"], how="left")
+    else:
+        patterns[["meanSqPull", "nHitsNoSegment"]] = np.nan
+
+    # ACTS's double matching: a majority of the muon and a majority of the
+    # pattern, plus the requirement that the pattern followed the muon across
+    # more than one chamber
     patterns["isMatch"] = (
         (patterns["mainMuon"] >= 0)
-        & (patterns["completeness"] >= min_completeness)
-        & (patterns["nStationsWithTruth"] >= min_stations)
+        & (patterns["completeness"] >= matching_ratio)
+        & (patterns["purity"] >= matching_ratio)
+        & (patterns["stationsWithMuon"] >= min_stations)
     )
-    # the best pattern of a muon is the one holding the most of its hits; the
-    # others are duplicates of the same muon
-    matches = patterns[patterns["isMatch"]].sort_values(
-        "nTruthPrec", ascending=False)
-    best = matches.drop_duplicates(["event", "mainMuon"])
+
+    # the best pattern of a muon is the one sharing the most of it; the rest are
+    # duplicates, and are not fakes
+    ranked = patterns[patterns["isMatch"]].sort_values("shared", ascending=False)
+    best = ranked.drop_duplicates(["event", "mainMuon"])
     patterns["isDuplicate"] = patterns["isMatch"] & ~patterns.index.isin(best.index)
 
     muons = muons.merge(
         best[["event", "mainMuon", "pattern", "completeness", "purity",
-              "nTruthPrec", "dEtaMuon", "dPhiMuon", "dThetaSeg", "dPhiSeg"]]
-        .rename(columns={"mainMuon": "muon"}),
+              "mismatched", "selectivity", "meanSqPull", "eta", "phi"]]
+        .rename(columns={"mainMuon": "muon", "eta": "patternEta",
+                         "phi": "patternPhi"}),
         on=["event", "muon"], how="left")
     muons["found"] = muons["pattern"].notna()
-    muons["nDuplicates"] = muons.merge(
-        patterns[patterns["isDuplicate"]].groupby(["event", "mainMuon"]).size()
-        .rename("n").reset_index().rename(columns={"mainMuon": "muon"}),
-        on=["event", "muon"], how="left")["n"].fillna(0).astype(int)
+    # test 5: the pattern's direction against the muon's at production
+    muons["dEta"] = muons["patternEta"] - muons["eta"]
+    muons["dPhi"] = (muons["patternPhi"] - muons["phi"] + np.pi) % (2 * np.pi) - np.pi
+
+    counts = (patterns[patterns["isDuplicate"]]
+              .groupby(["event", "mainMuon"]).size().rename("nDuplicates")
+              .reset_index().rename(columns={"mainMuon": "muon"}))
+    muons = muons.merge(counts, on=["event", "muon"], how="left")
+    muons["nDuplicates"] = muons["nDuplicates"].fillna(0).astype(int)
     return patterns, muons
 
 
 def metrics(patterns: pd.DataFrame, muons: pd.DataFrame) -> dict:
-    n_events = int(patterns["event"].nunique()) if len(patterns) else 0
-    n_muons = len(muons)
-    n_patterns = len(patterns)
+    events = int(patterns["event"].nunique()) if len(patterns) else 0
     found = muons[muons["found"]]
-    return {
-        "events": n_events,
-        "truth_muons": n_muons,
-        "patterns": n_patterns,
-        "found_muons": int(len(found)),
-        "efficiency": len(found) / n_muons if n_muons else 0.0,
-        "fake_fraction": float((~patterns["isMatch"]).mean()) if n_patterns else 0.0,
-        "fakes_per_event": float((~patterns["isMatch"]).sum() / n_events) if n_events else 0.0,
-        "duplicates_per_muon": float(muons["nDuplicates"].sum() / n_muons) if n_muons else 0.0,
-        "mean_completeness": float(found["completeness"].mean()) if len(found) else 0.0,
-        "mean_purity": float(found["purity"].mean()) if len(found) else 0.0,
-        "dEtaMuon_mean": float(found["dEtaMuon"].mean()) if len(found) else np.nan,
-        "dEtaMuon_rms": float(found["dEtaMuon"].std()) if len(found) else np.nan,
-        "dPhiMuon_mean": float(found["dPhiMuon"].mean()) if len(found) else np.nan,
-        "dPhiMuon_rms": float(found["dPhiMuon"].std()) if len(found) else np.nan,
-        "dThetaSeg_rms": float(found["dThetaSeg"].std()) if len(found) else np.nan,
-        "dPhiSeg_rms": float(found["dPhiSeg"].std()) if len(found) else np.nan,
+    matched = patterns[patterns["isMatch"]]
+    unmatched = patterns[~patterns["isMatch"]]
+
+    out = {
+        "events": events,
+        "truth_muons": len(muons),
+        "patterns": len(patterns),
+        # 1. efficiency, over every truth muon with no acceptance cut
+        "efficiency": len(found) / len(muons) if len(muons) else 0.0,
+        "mean_completeness": float(found["completeness"].mean()) if len(found) else np.nan,
+        # 2. what the matched patterns are made of
+        "mean_purity": float(matched["purity"].mean()) if len(matched) else np.nan,
+        "mean_mismatched": float(matched["mismatched"].mean()) if len(matched) else np.nan,
+        "mean_selectivity": float(matched["selectivity"].mean()) if len(matched) else np.nan,
+        # 3. are those hits on the muon's path
+        "median_meanSqPull": float(matched["meanSqPull"].median()) if len(matched) else np.nan,
+        # 4. patterns that matched no truth muon. Whether one of those is a
+        # fake depends on the sample: without pile-up every particle that
+        # crossed the spectrometer is in the truth tree, so it is one, while a
+        # pattern of a pile-up muon has nothing to match and cannot be told from
+        # a fake. The count is the same either way, so it is reported under the
+        # name that is true either way.
+        "patterns_per_event": len(patterns) / events if events else 0.0,
+        "unmatched_per_event": len(unmatched) / events if events else 0.0,
+        "unmatched_fraction": len(unmatched) / len(patterns) if len(patterns) else 0.0,
+        "duplicates_per_found_muon": (float(muons["nDuplicates"].sum() / len(found))
+                                      if len(found) else 0.0),
+        # 5. direction
+        "dEta_mean": float(found["dEta"].mean()) if len(found) else np.nan,
+        "dEta_rms": float(found["dEta"].std()) if len(found) else np.nan,
+        "dPhi_mean": float(found["dPhi"].mean()) if len(found) else np.nan,
+        "dPhi_rms": float(found["dPhi"].std()) if len(found) else np.nan,
     }
+    return out
 
 
 def main() -> int:
@@ -134,35 +152,34 @@ def main() -> int:
     p.add_argument("tables", type=Path, help="Directory of build_validation_tables.py")
     p.add_argument("--sample", default="", help="Label of the sample, e.g. PG0")
     p.add_argument("--implementation", default="", help="Label, e.g. cpu or cuda")
-    p.add_argument("--min-completeness", type=float, default=0.5)
-    p.add_argument("--min-stations", type=int, default=2)
+    p.add_argument("--matching-ratio", type=float, default=MATCHING_RATIO,
+                   help="ACTS's matchingRatio, applied to completeness and purity")
+    p.add_argument("--min-stations", type=int, default=MIN_STATIONS)
     p.add_argument("--output", type=Path, help="Csv the summary row is appended to")
     p.add_argument("--scan", action="store_true",
-                   help="Print efficiency & fakes against the completeness cut")
+                   help="Print the metrics against the matching ratio")
     args = p.parse_args()
 
     data = load(args.tables)
-    patterns, muons = summarise(data)
 
     if args.scan:
-        print(f"{'min completeness':>17}  {'efficiency':>10}  {'fakes/event':>11}  "
-              f"{'duplicates/muon':>15}")
-        for cut in np.arange(0.0, 1.01, 0.1):
-            flagged, flagged_muons = classify(patterns, muons, cut, args.min_stations)
-            row = metrics(flagged, flagged_muons)
-            print(f"{cut:>17.1f}  {row['efficiency']:>10.4f}  "
-                  f"{row['fakes_per_event']:>11.3f}  {row['duplicates_per_muon']:>15.3f}")
+        print(f"{'matching ratio':>15}{'efficiency':>12}{'unmatched/ev':>14}"
+              f"{'duplicates':>12}")
+        for value in np.arange(0.1, 1.01, 0.1):
+            row = metrics(*derive(data, value, args.min_stations))
+            print(f"{value:>15.1f}{row['efficiency']:>12.4f}"
+                  f"{row['unmatched_per_event']:>14.3f}"
+                  f"{row['duplicates_per_found_muon']:>12.3f}")
         print()
 
-    patterns, muons = classify(patterns, muons,
-                               args.min_completeness, args.min_stations)
+    patterns, muons = derive(data, args.matching_ratio, args.min_stations)
     patterns.to_parquet(args.tables / "pattern_flags.parquet", index=False)
     muons.to_parquet(args.tables / "muon_flags.parquet", index=False)
 
     summary = {
         "sample": args.sample or args.tables.name,
         "implementation": args.implementation,
-        "min_completeness": args.min_completeness,
+        "matching_ratio": args.matching_ratio,
         "min_stations": args.min_stations,
         **metrics(patterns, muons),
     }
@@ -171,8 +188,8 @@ def main() -> int:
         print(f"{key:<{width}}  {value}")
 
     if args.output:
-        row = pd.DataFrame([summary])
-        row.to_csv(args.output, mode="a", header=not args.output.exists(), index=False)
+        pd.DataFrame([summary]).to_csv(
+            args.output, mode="a", header=not args.output.exists(), index=False)
         print(f"\nAppended the summary to {args.output}")
     return 0
 

@@ -98,48 +98,19 @@ scripts/validation/build_validation_tables.py patterns_PG0_cpu.root \
   ParticleGun_MU0.root tables_PG0_cpu
 ```
 
-Six parquet tables, mirroring the branches of `MuonFastRecoTester`:
+Three parquet tables. Nothing is extracted that no test consumes, and no
+tracking geometry is involved: the hits and the truth lines are both given in
+the frame of their spectrometer sector.
 
 | table | one row per | contents |
 | --- | --- | --- |
-| `muons` | truth muon | pt, eta, phi, charge, origin, type |
-| `muon_station` | muon & station | findable precision / trigger / phi hits |
-| `segments` | truth segment | station, sector, position, direction, chi2 |
-| `truth_hits` | truth identifier | the surfaces the muon crossed, and what became of each |
-| `patterns` | pattern | theta, phi, layer counts, main muon, residuals |
-| `pattern_station` | pattern & station | hits by category: all, main muon, other muon, whole bucket |
-| `hit_residuals` | pattern hit | its distance from the muon's truth line |
-| `matches` | pattern & muon & station | hits they share |
+| `muons` | truth muon | pt, eta, phi, and how many of its surfaces produced a hit |
+| `patterns` | pattern | which muon it belongs to, what it is made of, its direction |
+| `pattern_chamber` | pattern and chamber | how far its hits sit from the muon's path |
 
-`hit_residuals` is the measurement identifier matching cannot make. An
-identifier is one tube for an MDT but a whole gas gap for a strip detector, so a
-pattern that took the wrong strip of the right gas gap is a perfect match by
-identifier — and sits visibly off the line here. Each hit of a pattern is placed
-in the global frame and its distance from the line of the truth segment is
-taken, station by station, since the toroid bends the muon between stations and
-only within a chamber is its path straight. The distance is measured in the
-bending plane alone, because a segment barely constrains the coordinate along
-the tube.
-
-It needs the surface cache, so it is written only when `--surfaces` is given;
-the driver passes it automatically. Expect the precision hits to be the wider
-of the two distributions: their position is the wire of the tube and the drift
-radius is not used, so a spread of the order of the tube radius is normal and
-is not a defect.
-
-`truth_hits` carries the identifiers themselves rather than a count, with two
-flags that split a miss into its two causes: `hasSpacePoint` says the surface
-produced a space point at all, `inPattern` says a pattern took it. A surface
-without a space point was lost before the finder ever saw it; one with a space
-point that no pattern took is a miss of the finder.
-
-To see which trees and branches an export actually holds:
-
-```bash
-.venv/bin/python -c "import uproot,sys
-f=uproot.open(sys.argv[1])
-[print(k) or [print('   ',b) for b in f[k].keys()] for k in f.keys()]" ParticleGun_MU0.root
-```
+Of the 36 branches in the truth tree it reads 7, and of the 25 in the space
+point tree it reads 8. What each test needs and why is in
+[docs/validation.md](docs/validation.md).
 
 ### 4. The metrics
 
@@ -148,10 +119,10 @@ scripts/validation/compute_metrics.py tables_PG0_cpu --sample PG0 \
   --implementation cpu --scan --output scores.csv
 ```
 
-Applies the definition, appends one row to the csv and writes `muon_flags` and
-`pattern_flags` next to the tables. `--scan` prints efficiency and fake rate
-against the completeness cut, so the effect of the choice is visible rather
-than buried in a default.
+Applies the definitions and appends one row to the csv, writing `muon_flags` and
+`pattern_flags` next to the tables. The matching criterion is ACTS's, from
+`TrackTruthMatcher`: a majority of the muon's surfaces *and* a majority of the
+pattern's hits, both at 0.5. `--scan` shows how the numbers move with it.
 
 ### 5. The figures
 
@@ -160,9 +131,10 @@ scripts/validation/make_plots.py tables_PG0_cpu tables_PG0_cuda \
   --labels cpu cuda --output-dir plots/PG0
 ```
 
-`efficiency.png` against pt and eta, `quality.png` for completeness and purity,
-`residuals.png` for the four angular residuals, `hit_residuals.png` for the
-distance of each hit from the truth line, `rates.png` for fakes and duplicates. Several table directories are overlaid, which is how CUDA is
+`efficiency.png` against pt and eta, `composition.png` for purity, selectivity
+and the mismatched fraction, `pulls.png` for how far the hits sit from the
+muon's path, `direction.png` for the pattern's direction against the muon's.
+Fakes and duplicates are counts and live in the csv. Several table directories are overlaid, which is how CUDA is
 compared with the CPU reference.
 
 ### 6. The event displays
