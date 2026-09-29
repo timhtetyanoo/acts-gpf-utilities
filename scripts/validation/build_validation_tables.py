@@ -20,6 +20,7 @@ Written tables, all parquet, one directory:
     muons           event, muon, pt, eta, phi, q, ...
     muon_station    event, muon, station, nPrec, nTrig, nPhi     (the truth)
     segments        event, muon, segment, station, position, direction
+    truth_hits      event, muon, segment, geo_id, was it findable, was it taken
     patterns        event, pattern, theta, phi, ..., main muon, residuals
     pattern_station event, pattern, station, counts by category
     matches         event, pattern, muon, station, shared identifiers
@@ -190,6 +191,7 @@ def main() -> int:
 
     muon_rows, muon_station_rows, segment_rows = [], [], []
     pattern_rows, pattern_station_rows, match_rows = [], [], []
+    truth_hit_rows = []
 
     for entry, event in enumerate(event_numbers):
         event_id = id_of_number[event]
@@ -233,14 +235,30 @@ def main() -> int:
         for row in truth_counts(space_points, per_muon):
             muon_station_rows.append({"event": event, **row})
 
+        # every identifier the muons crossed, and what became of it. A pattern
+        # can only take an identifier that reached a space point, so the two
+        # flags separate a loss before the finder from a loss inside it
+        collected = set(int(g) for g in
+                        ak.to_numpy(patterns["hit_geometryId"][entry]))
+        available = set(int(g) for g in space_points["geo_id"])
+
         chamber = ak.to_numpy(truth_event["Segments_chamberIdx"])
         seg_station = gpfval.station_of_name(chamber)
         pos = np.stack([ak.to_numpy(truth_event[f"Segments_pos{a}"])
                         for a in "XYZ"], axis=1)
         for segment in range(len(chamber)):
+            muon = int(truth_event["Segments_truthLink"][segment])
+            for geo_id in ak.to_list(truth_event["Segments_hitGeoIds"][segment]):
+                truth_hit_rows.append({
+                    "event": event, "muon": muon, "segment": segment,
+                    "station": int(seg_station[segment]),
+                    "geo_id": int(geo_id),
+                    "hasSpacePoint": int(geo_id) in available,
+                    "inPattern": int(geo_id) in collected,
+                })
             x, y, z = pos[segment]
             segment_rows.append({
-                "event": event, "muon": int(truth_event["Segments_truthLink"][segment]),
+                "event": event, "muon": muon,
                 "segment": segment, "station": int(seg_station[segment]),
                 "chamberIdx": int(chamber[segment]),
                 "sector": int(truth_event["Segments_sector"][segment]),
@@ -344,7 +362,8 @@ def main() -> int:
     args.output.mkdir(parents=True, exist_ok=True)
     tables = {
         "muons": muon_rows, "muon_station": muon_station_rows,
-        "segments": segment_rows, "patterns": pattern_rows,
+        "segments": segment_rows, "truth_hits": truth_hit_rows,
+        "patterns": pattern_rows,
         "pattern_station": pattern_station_rows, "matches": match_rows,
     }
     for name, rows in tables.items():

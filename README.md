@@ -105,9 +105,24 @@ Six parquet tables, mirroring the branches of `MuonFastRecoTester`:
 | `muons` | truth muon | pt, eta, phi, charge, origin, type |
 | `muon_station` | muon & station | findable precision / trigger / phi hits |
 | `segments` | truth segment | station, sector, position, direction, chi2 |
+| `truth_hits` | truth identifier | the surfaces the muon crossed, and what became of each |
 | `patterns` | pattern | theta, phi, layer counts, main muon, residuals |
 | `pattern_station` | pattern & station | hits by category: all, main muon, other muon, whole bucket |
 | `matches` | pattern & muon & station | hits they share |
+
+`truth_hits` carries the identifiers themselves rather than a count, with two
+flags that split a miss into its two causes: `hasSpacePoint` says the surface
+produced a space point at all, `inPattern` says a pattern took it. A surface
+without a space point was lost before the finder ever saw it; one with a space
+point that no pattern took is a miss of the finder.
+
+To see which trees and branches an export actually holds:
+
+```bash
+.venv/bin/python -c "import uproot,sys
+f=uproot.open(sys.argv[1])
+[print(k) or [print('   ',b) for b in f[k].keys()] for k in f.keys()]" ParticleGun_MU0.root
+```
 
 ### 4. The metrics
 
