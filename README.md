@@ -49,26 +49,34 @@ The scripts default to `.venv/bin/python` and fall back to `python3`.
 
 The n-tuples are written by Athena's `MuonActsDump`: `SpacePointWriter` fills
 the `MuonSpacePoints` tree, `TruthSegmentWriter` the `MuonTruth` tree. The
-geometry comes from the ACTS tracking geometry json converter. A typical data
-directory holds:
+geometry comes from the ACTS tracking geometry json converter. They live in
+`data/` of this repository, which is ignored by git, so every machine needs its
+own copy:
 
 ```text
-ParticleGun_MU0.root
-ParticleGun_MU200.root
-ActsTrackingGeometry.json
+data/ParticleGun_MU0.root
+data/ParticleGun_MU200.root
+data/ActsTrackingGeometry.json
 ```
+
+`GPF_DATA_DIR` points the scripts elsewhere.
 
 ## The whole chain
 
 ```bash
-export GPF_DATA_DIR=/path/to/data
 export ACTS_BUILD_DIR=/path/to/acts/build   # omit to analyse existing pattern files
 
 scripts/validation/run_full_validation.sh
 ```
 
 Stages whose output exists are skipped; `GPF_FORCE=1` redoes them. Stage 1 needs
-the build machine, stages 2 to 8 run anywhere.
+the build machine, stages 2 to 7 run anywhere.
+
+Everything is written into `gpf_validation/` of this repository. The pattern
+files, `scores.csv`, the logs and the figures are tracked, so a run is
+transferred with a commit and a push; the tables and the surface cache are
+large and regenerable and are ignored. The last stage warns about any tracked
+output above 50 MB, since GitHub refuses files above 100 MB.
 
 ### 1. The patterns
 
@@ -77,7 +85,7 @@ scripts/validation/run_global_pattern_validation.sh
 ```
 
 Each case writes `patterns_<sample>_<implementation>.root` and a log into
-`${GPF_OUT_DIR}` (by default `${GPF_DATA_DIR}/gpf_validation`). Overrides:
+`${GPF_OUT_DIR}` (by default `gpf_validation/` of this repository). Overrides:
 `GPF_SAMPLES`, `GPF_IMPLEMENTATIONS`, `GPF_MAX_EVENTS`, `GPF_GEOMETRY`,
 `GPF_OUT_DIR`, `GPF_<SAMPLE>_NTUPLE` and `GPF_FORCE`.
 

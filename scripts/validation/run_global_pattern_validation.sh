@@ -6,10 +6,10 @@
 #
 # Required:
 #   ACTS_BUILD_DIR        build directory holding bin/ActsUnitTestGlobalPatternFinderData
-#   GPF_DATA_DIR          directory holding the n-tuples & the tracking geometry
 #
 # Optional:
-#   GPF_OUT_DIR           output directory                 (default: ${GPF_DATA_DIR}/gpf_validation)
+#   GPF_DATA_DIR          n-tuples & tracking geometry     (default: <this repo>/data)
+#   GPF_OUT_DIR           output directory                 (default: <this repo>/gpf_validation)
 #   GPF_GEOMETRY          tracking geometry json           (default: ${GPF_DATA_DIR}/ActsTrackingGeometry.json)
 #   GPF_SAMPLES           samples to process               (default: "PG0 PG200")
 #   GPF_IMPLEMENTATIONS   implementations to run           (default: "cpu")
@@ -22,9 +22,11 @@
 
 set -Eeuo pipefail
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "${script_dir}/../.." && pwd)"
 build_dir="${ACTS_BUILD_DIR:?ACTS_BUILD_DIR is not set}"
-data_dir="${GPF_DATA_DIR:?GPF_DATA_DIR is not set}"
-out_dir="${GPF_OUT_DIR:-${data_dir}/gpf_validation}"
+data_dir="${GPF_DATA_DIR:-${repo_root}/data}"
+out_dir="${GPF_OUT_DIR:-${repo_root}/gpf_validation}"
 geometry="${GPF_GEOMETRY:-${data_dir}/ActsTrackingGeometry.json}"
 executable="${build_dir}/bin/ActsUnitTestGlobalPatternFinderData"
 

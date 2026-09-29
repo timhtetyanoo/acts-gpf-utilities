@@ -8,12 +8,13 @@
 # later ones only read the pattern files and the n-tuple and run anywhere. Leave
 # ACTS_BUILD_DIR unset to analyse pattern files that were produced elsewhere.
 #
-# Required:
-#   GPF_DATA_DIR     directory holding the n-tuples & the tracking geometry
+# Everything is written into <this repo>/gpf_validation. What is small enough to
+# push is tracked; the tables & the surface cache are ignored by .gitignore.
 #
 # Optional:
 #   ACTS_BUILD_DIR   build directory; unset skips the pattern finding
-#   GPF_OUT_DIR      output directory                  (default: ${GPF_DATA_DIR}/gpf_validation)
+#   GPF_DATA_DIR     n-tuples & tracking geometry      (default: <this repo>/data)
+#   GPF_OUT_DIR      output directory                  (default: <this repo>/gpf_validation)
 #   GPF_SCORES       csv the metrics are collected in  (default: ${GPF_OUT_DIR}/scores.csv)
 #   GPF_PLOT_DIR     directory of the figures          (default: ${GPF_OUT_DIR}/plots)
 #   GPF_SAMPLES      samples to process                (default: "PG0 PG200")
@@ -21,15 +22,14 @@
 #   GPF_MATCHING_RATIO    ACTS's matchingRatio         (default: 0.5)
 #   GPF_MIN_STATIONS      chambers a match needs       (default: 2)
 #   GPF_DISPLAY_EVENTS    events drawn per case        (default: 5)
-#   GPF_REPO_OUT     small artifacts copied here       (default: <this repo>/gpf_validation)
 #   PYTHON           python interpreter                (default: <this repo>/.venv/bin/python)
 
 set -Eeuo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/../.." && pwd)"
-data_dir="${GPF_DATA_DIR:?GPF_DATA_DIR is not set}"
-out_dir="${GPF_OUT_DIR:-${data_dir}/gpf_validation}"
+data_dir="${GPF_DATA_DIR:-${repo_root}/data}"
+out_dir="${GPF_OUT_DIR:-${repo_root}/gpf_validation}"
 scores="${GPF_SCORES:-${out_dir}/scores.csv}"
 plot_dir="${GPF_PLOT_DIR:-${out_dir}/plots}"
 geometry="${GPF_GEOMETRY:-${data_dir}/ActsTrackingGeometry.json}"
@@ -57,7 +57,8 @@ mkdir -p -- "${out_dir}/logs"
 
 # --- 1. the patterns, on the build machine ---------------------------------
 if [[ -n "${ACTS_BUILD_DIR:-}" ]]; then
-  GPF_OUT_DIR="${out_dir}" "${script_dir}/run_global_pattern_validation.sh"
+  GPF_DATA_DIR="${data_dir}" GPF_OUT_DIR="${out_dir}" GPF_GEOMETRY="${geometry}" \
+    "${script_dir}/run_global_pattern_validation.sh"
 else
   echo "ACTS_BUILD_DIR is unset, using the pattern files already in ${out_dir}"
 fi
@@ -137,17 +138,16 @@ if (( ${#implementations[@]} > 1 )); then
   done
 fi
 
-# --- 8. copy the small artifacts into this repo ----------------------------
-# The tables and the surface cache stay in ${out_dir}: large and regenerable.
-repo_out="${GPF_REPO_OUT:-${repo_root}/gpf_validation}"
-mkdir -p -- "${repo_out}/plots" "${repo_out}/logs"
-cp -f -- "${scores}" "${repo_out}/scores.csv"
-shopt -s nullglob
-for f in "${out_dir}"/patterns_*.root; do cp -f -- "${f}" "${repo_out}/"; done
-for f in "${out_dir}"/logs/*; do [[ -f "${f}" ]] && cp -f -- "${f}" "${repo_out}/logs/"; done
-cp -Rf -- "${plot_dir}/." "${repo_out}/plots/"
+# --- 8. warn about tracked files too large to push -------------------------
+# GitHub rejects files above 100 MB.
+if git -C "${repo_root}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  while IFS= read -r -d '' f; do
+    if ! git -C "${repo_root}" check-ignore -q -- "${f}"; then
+      echo "Warning: ${f} is tracked and larger than 50 MB, consider ignoring it" >&2
+    fi
+  done < <(find "${out_dir}" -type f -size +50M -print0)
+fi
 
 echo
 echo "Metrics: ${scores}"
 echo "Figures: ${plot_dir}"
-echo "Copied:  ${repo_out}"

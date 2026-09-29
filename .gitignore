@@ -20,5 +20,9 @@ __pycache__/
 !gpf_validation/*.csv
 !gpf_validation/*.log
 
+# large & regenerable outputs of a validation run
+gpf_validation/tables_*/
+gpf_validation/surfaces.parquet
+
 # input n-tuples & geometry, far too large to track
 data/
