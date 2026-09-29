@@ -21,6 +21,7 @@ Written tables, all parquet, one directory:
     muon_station    event, muon, station, nPrec, nTrig, nPhi     (the truth)
     segments        event, muon, segment, station, position, direction
     truth_hits      event, muon, segment, geo_id, was it findable, was it taken
+    hit_residuals   event, pattern, hit, its distance from the truth line
     patterns        event, pattern, theta, phi, ..., main muon, residuals
     pattern_station event, pattern, station, counts by category
     matches         event, pattern, muon, station, shared identifiers
@@ -50,6 +51,13 @@ SP_BRANCHES = [
     "spacePoint_muonId",
     "spacePoint_bucketId",
 ]
+#: Only read when the hits have to be placed in the global frame
+SP_GEOMETRY_BRANCHES = (
+    ["spacePoint_localPosX", "spacePoint_localPosY", "spacePoint_localPosZ"]
+    + [f"spacePoint_toSectorFrameLinearCol{c}{a}"
+       for c in range(3) for a in ("Phi", "Theta")]
+    + [f"spacePoint_toSectorFrameTranslation{a}" for a in "XYZ"]
+)
 TRUTH_BRANCHES = [
     "event_id",
     "Muons_pt", "Muons_eta", "Muons_phi", "Muons_q",
@@ -157,6 +165,90 @@ def truth_counts(space_points, per_muon):
     return rows
 
 
+def bending_plane_residual(hit, segment_position, segment_direction):
+    """Distance of a hit from the line of a truth segment, in the bending plane.
+
+    A segment constrains the muon precisely in the plane that contains the beam
+    axis and the track, and hardly at all along the tube, so the distance is
+    taken in the R-z projection alone. Mixing in the third coordinate would fold
+    a well measured direction together with a badly measured one.
+
+    The direction is projected the way FastRecoVisualizationTool.cxx projects it
+    when it draws a segment in its R-z view, but kept as a vector instead of a
+    slope, which stays finite for a track leaving the barrel radially.
+
+    @return the signed distance in millimetres, positive on the outward side
+    """
+    radius = np.hypot(hit[0], hit[1])
+    seg_radius = np.hypot(segment_position[0], segment_position[1])
+    if seg_radius < 1e-6:
+        return np.nan
+    # the rate at which R grows along the segment, and the one at which z does
+    along = np.array([segment_direction[2],
+                      (segment_position[0] * segment_direction[0]
+                       + segment_position[1] * segment_direction[1]) / seg_radius])
+    norm = np.hypot(*along)
+    if norm < 1e-9:
+        return np.nan
+    along /= norm
+    offset = np.array([hit[2] - segment_position[2], radius - seg_radius])
+    return float(along[0] * offset[1] - along[1] * offset[0])
+
+
+def hit_residuals(event, pattern, main, mine, stations, geo_ids, classes,
+                  matched, hit_bucket, hit_index, positions, row_of_key,
+                  truth_event, seg_station, segment_ids, segment_line):
+    """Distance of every hit of a pattern from the truth line of its muon.
+
+    The comparison is made station by station. A pattern crosses several
+    stations and the toroid bends the muon between them, so its trajectory is
+    not one straight line; inside a chamber it is, which is why the truth
+    segments are per chamber in the first place.
+
+    This is the measurement that identifier matching cannot make. An identifier
+    is one tube for an MDT but a whole gas gap for a strip detector, so a
+    pattern that took the wrong strip of the right gas gap is a perfect match by
+    identifier and sits visibly off the line here.
+
+    Hits that belong to no truth muon are measured as well, against the line of
+    the pattern's main muon, since the question for them is precisely how far
+    from that muon's path the pattern reached.
+    """
+    buckets = hit_bucket[mine]
+    indices = hit_index[mine]
+    links = ak.to_numpy(truth_event["Segments_truthLink"])
+    rows = []
+    for station in np.unique(stations):
+        here = stations == station
+        candidates = [segment for segment in range(len(links))
+                      if int(links[segment]) == main
+                      and int(seg_station[segment]) == station]
+        if not candidates:
+            continue
+        # several segments of one muon can share a station; take the one the
+        # pattern actually overlaps with
+        in_station = set(int(g) for g in geo_ids[here])
+        segment = max(candidates,
+                      key=lambda s: (len(segment_ids[s] & in_station), -s))
+        position, direction = segment_line[segment]
+        for hit in np.flatnonzero(here):
+            row = row_of_key.get((int(buckets[hit]), int(indices[hit])))
+            if row is None or not np.isfinite(positions[row]).all():
+                continue
+            point = positions[row]
+            rows.append({
+                "event": event, "pattern": int(pattern), "muon": int(main),
+                "station": int(station), "segment": int(segment),
+                "geo_id": int(geo_ids[hit]),
+                "isPrecision": bool(classes[hit][PREC]),
+                "matched": bool(matched[hit] == main),
+                "residual": bending_plane_residual(point, position, direction),
+                "R": float(np.hypot(point[0], point[1])),
+                "z": float(point[2]),
+            })
+    return rows
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -164,6 +256,10 @@ def main() -> int:
     p.add_argument("ntuple", type=Path, help="Athena exported n-tuple")
     p.add_argument("output", type=Path, help="Directory the tables are written to")
     p.add_argument("--pattern-tree", default="muonGlobalPatterns")
+    p.add_argument("--surfaces", type=Path,
+                   help="Surface cache of build_geometry_cache.py. Given, the "
+                        "distance of every pattern hit from the truth line is "
+                        "measured as well")
     p.add_argument("--max-events", type=int, default=0, help="0 reads all of them")
     args = p.parse_args()
 
@@ -184,14 +280,16 @@ def main() -> int:
                          f"to the n-tuple, first one {missing[0]}")
     wanted_ids = {id_of_number[n] for n in event_numbers}
 
-    sp_all = read_selected(ntuple["MuonSpacePoints"], SP_BRANCHES, wanted_ids)
+    surfaces = gpfval.SurfaceMap(args.surfaces) if args.surfaces else None
+    sp_branches = SP_BRANCHES + (SP_GEOMETRY_BRANCHES if surfaces else [])
+    sp_all = read_selected(ntuple["MuonSpacePoints"], sp_branches, wanted_ids)
     truth_all = read_selected(ntuple["MuonTruth"], TRUTH_BRANCHES, wanted_ids)
     sp_of_id = {int(e): i for i, e in enumerate(ak.to_numpy(sp_all["event_id"]))}
     truth_of_id = {int(e): i for i, e in enumerate(ak.to_numpy(truth_all["event_id"]))}
 
     muon_rows, muon_station_rows, segment_rows = [], [], []
     pattern_rows, pattern_station_rows, match_rows = [], [], []
-    truth_hit_rows = []
+    truth_hit_rows, residual_rows = [], []
 
     for entry, event in enumerate(event_numbers):
         event_id = id_of_number[event]
@@ -217,6 +315,30 @@ def main() -> int:
         is_prec, is_trig, is_phi = gpfval.hit_classes(
             fields["technology"], fields["measuresEta"], fields["measuresPhi"])
         space_points |= {"isPrec": is_prec, "isTrig": is_trig, "isPhi": is_phi}
+
+        positions = None
+        if surfaces is not None:
+            local = np.stack([ak.to_numpy(sp_event[f"spacePoint_localPos{a}"])
+                              for a in "XYZ"], axis=1)
+            rotation = np.stack(
+                [gpfval.direction(
+                    sp_event[f"spacePoint_toSectorFrameLinearCol{c}Phi"],
+                    sp_event[f"spacePoint_toSectorFrameLinearCol{c}Theta"])
+                 for c in range(3)], axis=2)
+            translation = np.stack(
+                [ak.to_numpy(sp_event[f"spacePoint_toSectorFrameTranslation{a}"])
+                 for a in "XYZ"], axis=1)
+            positions = surfaces.to_global(space_points["geo_id"], local,
+                                           rotation, translation)
+            # the writer names a hit by its bucket and its index within it; the
+            # reader fills the buckets in tree order, so the index is a running
+            # counter that restarts with every new bucket
+            row_of_key = {}
+            counters: dict[int, int] = {}
+            for row, bucket in enumerate(space_points["bucket"]):
+                index = counters.get(bucket, 0)
+                counters[bucket] = index + 1
+                row_of_key[(int(bucket), index)] = row
 
         # --- the truth -----------------------------------------------------
         per_muon = truth_hits_per_muon(truth_event)
@@ -278,11 +400,21 @@ def main() -> int:
                 "nGeoIds": len(truth_event["Segments_hitGeoIds"][segment]),
             })
 
+        segment_ids = [set(int(v) for v in ak.to_list(ids))
+                       for ids in truth_event["Segments_hitGeoIds"]]
+        segment_line = {}
+        for segment in range(len(chamber)):
+            segment_line[segment] = (
+                pos[segment],
+                gpfval.direction(truth_event["Segments_dirPhi"][segment],
+                                 truth_event["Segments_dirTheta"][segment]))
+
         # --- the patterns --------------------------------------------------
         hit_pattern = ak.to_numpy(patterns["hit_patternIdx"][entry]).astype(int)
         hit_station = ak.to_numpy(patterns["hit_station"][entry]).astype(int)
         hit_geo = ak.to_numpy(patterns["hit_geometryId"][entry]).astype(np.int64)
         hit_bucket = ak.to_numpy(patterns["hit_bucketId"][entry]).astype(int)
+        hit_index = ak.to_numpy(patterns["hit_indexInBucket"][entry]).astype(int)
         hit_fields = gpfval.decode_muon_id(ak.to_numpy(patterns["hit_muonId"][entry]))
         hit_classes = np.stack(gpfval.hit_classes(
             hit_fields["technology"], hit_fields["measuresEta"],
@@ -339,6 +471,12 @@ def main() -> int:
                             "event": event, "pattern": pattern, "muon": int(muon),
                             "station": station, "nShared": shared})
 
+            if positions is not None and main >= 0:
+                residual_rows.extend(hit_residuals(
+                    event, pattern, main, mine, stations, geo_ids, classes,
+                    matched, hit_bucket, hit_index, positions, row_of_key,
+                    truth_event, seg_station, segment_ids, segment_line))
+
             theta = float(patterns["pattern_theta"][entry][pattern])
             phi = float(patterns["pattern_phi"][entry][pattern])
             row = {
@@ -363,7 +501,7 @@ def main() -> int:
     tables = {
         "muons": muon_rows, "muon_station": muon_station_rows,
         "segments": segment_rows, "truth_hits": truth_hit_rows,
-        "patterns": pattern_rows,
+        "hit_residuals": residual_rows, "patterns": pattern_rows,
         "pattern_station": pattern_station_rows, "matches": match_rows,
     }
     for name, rows in tables.items():

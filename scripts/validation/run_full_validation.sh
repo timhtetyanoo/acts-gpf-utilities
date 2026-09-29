@@ -79,7 +79,8 @@ for sample in "${samples[@]}"; do
       continue
     fi
     "${python}" "${script_dir}/build_validation_tables.py" \
-      "${out_dir}/patterns_${tag}.root" "$(ntuple_for "${sample}")" "${tables}"
+      "${out_dir}/patterns_${tag}.root" "$(ntuple_for "${sample}")" "${tables}" \
+      --surfaces "${surfaces}"
   done
 done
 

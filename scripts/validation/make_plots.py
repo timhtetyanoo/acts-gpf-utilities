@@ -9,6 +9,8 @@ reference.
     efficiency.png   efficiency against pt and against eta
     quality.png      completeness & purity of the matched patterns
     residuals.png    the angular residuals of a pattern against its muon
+    hit_residuals.png  how far each hit sits from the truth line, when the
+                       tables were built with --surfaces
     rates.png        fakes & duplicates, and their dependence on the cut
 """
 
@@ -50,7 +52,7 @@ def plot_efficiency(runs, out: Path):
     fig, axes = plt.subplots(1, 2, figsize=(8.5, 3.4))
     pt_bins = np.linspace(0.0, 100.0, 21)
     eta_bins = np.linspace(-2.8, 2.8, 29)
-    for label, muons, _ in runs:
+    for label, muons, _, _ in runs:
         for ax, column, bins, xlabel in (
                 (axes[0], "pt", pt_bins, r"truth $p_\mathrm{T}$ [GeV]"),
                 (axes[1], "eta", eta_bins, r"truth $\eta$")):
@@ -67,7 +69,7 @@ def plot_efficiency(runs, out: Path):
 
 def plot_quality(runs, out: Path):
     fig, axes = plt.subplots(1, 2, figsize=(8.5, 3.4))
-    for label, muons, patterns in runs:
+    for label, muons, patterns, _ in runs:
         found = muons[muons["found"]]
         axes[0].hist(found["completeness"].dropna(), bins=np.linspace(0, 1.4, 29),
                      histtype="step", lw=1.3, label=label)
@@ -97,7 +99,7 @@ def plot_residuals(runs, out: Path):
     ]
     fig, axes = plt.subplots(2, 2, figsize=(8.5, 6.0))
     for ax, (column, xlabel, bins) in zip(axes.ravel(), panels):
-        for label, muons, _ in runs:
+        for label, muons, _, _ in runs:
             values = muons.loc[muons["found"], column].dropna()
             if values.empty:
                 continue
@@ -111,10 +113,56 @@ def plot_residuals(runs, out: Path):
     plt.close(fig)
 
 
+def plot_hit_residuals(runs, out: Path):
+    """How far the hits of a pattern sit from the line of the truth segment.
+
+    Left, split by whether the hit belongs to the muon by identifier: the
+    matched hits give the spread, the unmatched ones are what the pattern
+    reached out and picked up.
+
+    Right, split by technology. The precision hits are wider on purpose: their
+    position is the wire of the tube and the drift radius is not used, so a
+    spread of the order of the tube radius is expected and is not a defect. The
+    trigger and phi hits carry their own position and are the sharper measure.
+    """
+    bins = np.linspace(-100.0, 100.0, 81)
+    fig, axes = plt.subplots(1, 2, figsize=(8.5, 3.4))
+    drawn = False
+    for label, _, _, residuals in runs:
+        if residuals is None or residuals.empty:
+            continue
+        drawn = True
+        for matched, style in ((True, "-"), (False, "--")):
+            values = residuals.loc[residuals["matched"] == matched, "residual"]
+            if values.empty:
+                continue
+            axes[0].hist(values, bins=bins, histtype="step", lw=1.3, ls=style,
+                         label=f"{label}, {'of the muon' if matched else 'of nothing'}"
+                               f": {values.std():.1f} mm")
+        for precision, style in ((False, "-"), (True, "--")):
+            values = residuals.loc[(residuals["isPrecision"] == precision)
+                                   & residuals["matched"], "residual"]
+            if values.empty:
+                continue
+            axes[1].hist(values, bins=bins, histtype="step", lw=1.3, ls=style,
+                         label=f"{label}, {'precision' if precision else 'trigger & phi'}"
+                               f": {values.std():.1f} mm")
+    if not drawn:
+        plt.close(fig)
+        return
+    for ax in axes:
+        ax.set_xlabel("distance from the truth line, bending plane [mm]")
+        ax.set_ylabel("hits")
+        ax.legend(loc="upper left", fontsize=7)
+    fig.tight_layout()
+    fig.savefig(out)
+    plt.close(fig)
+
+
 def plot_rates(runs, out: Path):
     fig, axes = plt.subplots(1, 2, figsize=(8.5, 3.4))
     width = 0.8 / max(len(runs), 1)
-    for i, (label, muons, patterns) in enumerate(runs):
+    for i, (label, muons, patterns, _) in enumerate(runs):
         per_event = patterns.groupby("event").agg(
             patterns=("pattern", "size"), fakes=("isMatch", lambda c: int((~c).sum())))
         categories = ["patterns", "fakes", "duplicates"]
@@ -127,7 +175,7 @@ def plot_rates(runs, out: Path):
     axes[0].set_xticklabels(["patterns/event", "fakes/event", "duplicates/muon"])
     axes[0].set_ylabel("mean")
     axes[0].legend()
-    limit = max(1.0, float(max(m["genPrec"].max() for _, m, _ in runs)))
+    limit = max(1.0, float(max(m["genPrec"].max() for _, m, _, _ in runs)))
     axes[1].plot([0, limit], [0, limit], "k--", lw=0.8)
     axes[1].set_xlabel("findable precision hits of the muon")
     axes[1].set_ylabel("precision hits in its pattern")
@@ -153,16 +201,19 @@ def main() -> int:
 
     runs = []
     for label, tables in zip(labels, args.tables):
+        residuals = tables / "hit_residuals.parquet"
         runs.append((label,
                      pd.read_parquet(tables / "muon_flags.parquet"),
-                     pd.read_parquet(tables / "pattern_flags.parquet")))
+                     pd.read_parquet(tables / "pattern_flags.parquet"),
+                     pd.read_parquet(residuals) if residuals.exists() else None))
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     plot_efficiency(runs, args.output_dir / "efficiency.png")
     plot_quality(runs, args.output_dir / "quality.png")
     plot_residuals(runs, args.output_dir / "residuals.png")
+    plot_hit_residuals(runs, args.output_dir / "hit_residuals.png")
     plot_rates(runs, args.output_dir / "rates.png")
-    print(f"Wrote four figures to {args.output_dir}")
+    print(f"Wrote the figures to {args.output_dir}")
     return 0
 
 
