@@ -108,7 +108,8 @@ for sample in "${samples[@]}"; do
     labels+=("${implementation}")
   done
   "${python}" "${script_dir}/make_plots.py" "${tables[@]}" \
-    --labels "${labels[@]}" --output-dir "${plot_dir}/${sample}"
+    --labels "${labels[@]}" --sample "${sample}" \
+    --output-dir "${plot_dir}/${sample}"
 done
 
 # --- 6. a handful of event displays ----------------------------------------
