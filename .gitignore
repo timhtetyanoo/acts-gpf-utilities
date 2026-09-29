@@ -1,16 +1,24 @@
+# macOS
+.DS_Store
+
+# local artifacts of a validation run
+*.parquet
+__pycache__/
+.venv/
+
+# results copied into the repo are kept, everything else is not
 *.root
 *.csv
 *.log
 *.png
 *.pdf
-*.parquet
-__pycache__/
-.venv/
-
-# Small validation artifacts copied here for transfer off this machine
-!gpf_validation/
-!gpf_validation/**/
-!gpf_validation/*.csv
+!gpf_validation/**/*.root
+!gpf_validation/**/*.csv
+!gpf_validation/**/*.log
+!gpf_validation/**/*.png
 !gpf_validation/*.root
-!gpf_validation/plots/*.png
-!gpf_validation/logs/*.log
+!gpf_validation/*.csv
+!gpf_validation/*.log
+
+# input n-tuples & geometry, far too large to track
+data/

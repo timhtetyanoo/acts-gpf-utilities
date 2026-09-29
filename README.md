@@ -3,10 +3,15 @@
 Validation and benchmarking tooling around the muon global pattern finder in
 [ACTS](https://github.com/acts-project/acts). The algorithm, its unit tests and
 the run entry point stay in ACTS; this repository keeps the scripts that drive
-them, score the output and draw the plots.
+them, measure the output and draw the plots.
 
 The CPU example is the reference against which the CUDA implementation will be
-validated, so every script is written to take the implementation as a parameter.
+validated, so every script takes the implementation as a parameter.
+
+The chain follows Athena's `MuonFastRecoTester`: one stage produces numbers and
+nothing else, a later stage decides what those numbers mean. A change to the
+definition of "the pattern found the muon" therefore never requires running the
+pattern finder again.
 
 ## Contents
 
@@ -15,25 +20,37 @@ scripts/
   validation/
     run_full_validation.sh             the whole chain, every stage skippable
     run_global_pattern_validation.sh   run the finder over the configured samples
-    preprocess_truth.py                truth tree -> compact per muon geometry ids
-    score_patterns.py                  patterns + truth -> one csv row per case
+    gpfval.py                          definitions transcribed from ACTS & Athena
+    build_geometry_cache.py            tracking geometry json -> surface transforms
+    build_validation_tables.py         patterns + truth -> the validation tables
+    compute_metrics.py                 the tables -> efficiency, fakes, residuals
+    make_plots.py                      the four figures
+    event_display.py                   single events, R-z and x-y
     compare_patterns.py                two runs, hit by hit (cpu against cuda)
-    plot_performance.py                figures from the csv & the pattern files
-plots/
+docs/
+  acts_changes.md                      what this work changed in the ACTS checkout
 ```
 
 ## Requirements
 
 - Bash;
-- an ACTS build containing `ActsUnitTestGlobalPatternFinderData`;
-- Python 3.10 or newer with uproot, numpy, pandas and matplotlib;
-- the Athena-exported space point n-tuples and the matching tracking geometry.
+- an ACTS build containing `ActsUnitTestGlobalPatternFinderData`, for stage 1
+  only; the analysis stages need no build;
+- Python 3.10 or newer with the packages of `requirements.txt`;
+- the Athena-exported n-tuples and the matching tracking geometry.
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+```
+
+The scripts default to `.venv/bin/python` and fall back to `python3`.
 
 ## Inputs
 
-The n-tuples are written by Athena's `MuonActsDump/SpacePointWriter`
-(tree `MuonSpacePoints`), the geometry by the ACTS tracking geometry json
-converter. A typical data directory holds:
+The n-tuples are written by Athena's `MuonActsDump`: `SpacePointWriter` fills
+the `MuonSpacePoints` tree, `TruthSegmentWriter` the `MuonTruth` tree. The
+geometry comes from the ACTS tracking geometry json converter. A typical data
+directory holds:
 
 ```text
 ParticleGun_MU0.root
@@ -41,102 +58,204 @@ ParticleGun_MU200.root
 ActsTrackingGeometry.json
 ```
 
-## Running the pattern finder
-
-```bash
-export ACTS_BUILD_DIR=/path/to/acts/build
-export GPF_DATA_DIR=/path/to/data
-
-scripts/validation/run_global_pattern_validation.sh
-```
-
-Each case writes `patterns_<sample>_<implementation>.root` and a log into
-`${GPF_OUT_DIR}` (by default `${GPF_DATA_DIR}/gpf_validation`). Finished cases
-are skipped, so the script can be re-run after adding a sample.
-
-Overrides: `GPF_SAMPLES`, `GPF_IMPLEMENTATIONS`, `GPF_MAX_EVENTS`,
-`GPF_GEOMETRY`, `GPF_OUT_DIR`, `GPF_<SAMPLE>_NTUPLE` and `GPF_FORCE`.
-
-A quick check on a handful of events:
-
-```bash
-GPF_SAMPLES=PG0 GPF_MAX_EVENTS=5 scripts/validation/run_global_pattern_validation.sh
-```
-
-## Output
-
-One entry per event, holding every pattern of that event:
-
-| branch group | contents |
-| --- | --- |
-| `event_id` | index of the event in the input file |
-| `pattern_*` | sector, theta, phi, precision / trigger / phi layer counts, mean normalized residual squared, number of hits |
-| `hit_*` | pattern index, station, geometry identifier, muon identifier, bucket identifier and index within the bucket |
-
-The geometry and muon identifiers carry the truth matching, the bucket
-identifier and the index within the bucket identify a hit across runs, which is
-what the comparison between implementations is based on.
-
 ## The whole chain
 
 ```bash
-export ACTS_BUILD_DIR=/path/to/acts/build
 export GPF_DATA_DIR=/path/to/data
+export ACTS_BUILD_DIR=/path/to/acts/build   # omit to analyse existing pattern files
 
 scripts/validation/run_full_validation.sh
 ```
 
-It runs the four stages below and leaves `scores.csv` and the figures in the
-output directory. Stages whose output exists are skipped; `GPF_FORCE=1` redoes
-them.
+Stages whose output exists are skipped; `GPF_FORCE=1` redoes them. Stage 1 needs
+the build machine, stages 2 to 8 run anywhere.
 
-### Truth
-
-```bash
-scripts/validation/preprocess_truth.py ParticleGun_MU0.root truth_PG0.parquet
-```
-
-Reads the truth tree and writes `event, muon, station, geo_id`. The branch
-names differ between exports, so they are detected from the file and can be
-overridden; `--list` prints the trees and branches the file actually holds.
-
-Matching is by geometry identifier because the export carries no per space
-point truth link. One identifier covers several space points of a layer, hence
-the distinct identifiers are counted, never the hits.
-
-### Scores
+### 1. The patterns
 
 ```bash
-scripts/validation/score_patterns.py patterns_PG0_cpu.root truth_PG0.parquet \
-  --sample PG0 --implementation cpu --output scores.csv
+scripts/validation/run_global_pattern_validation.sh
 ```
 
-A pattern and a muon match when they share at least `--min-shared` identifiers,
-3 by default. Per case it reports the muon efficiency, duplicates per muon, the
-fake fraction, and the purity and completeness of the matched hits, and appends
-one row to the csv.
+Each case writes `patterns_<sample>_<implementation>.root` and a log into
+`${GPF_OUT_DIR}` (by default `${GPF_DATA_DIR}/gpf_validation`). Overrides:
+`GPF_SAMPLES`, `GPF_IMPLEMENTATIONS`, `GPF_MAX_EVENTS`, `GPF_GEOMETRY`,
+`GPF_OUT_DIR`, `GPF_<SAMPLE>_NTUPLE` and `GPF_FORCE`.
 
-### Comparison of two runs
+### 2. The surfaces
+
+```bash
+scripts/validation/build_geometry_cache.py ActsTrackingGeometry.json surfaces.parquet
+```
+
+The geometry json is half a gigabyte and is needed only for the transforms of
+its sensitive surfaces, so they are extracted once. Only the event displays use
+the result.
+
+### 3. The validation tables
+
+```bash
+scripts/validation/build_validation_tables.py patterns_PG0_cpu.root \
+  ParticleGun_MU0.root tables_PG0_cpu
+```
+
+Six parquet tables, mirroring the branches of `MuonFastRecoTester`:
+
+| table | one row per | contents |
+| --- | --- | --- |
+| `muons` | truth muon | pt, eta, phi, charge, origin, type |
+| `muon_station` | muon & station | findable precision / trigger / phi hits |
+| `segments` | truth segment | station, sector, position, direction, chi2 |
+| `patterns` | pattern | theta, phi, layer counts, main muon, residuals |
+| `pattern_station` | pattern & station | hits by category: all, main muon, other muon, whole bucket |
+| `matches` | pattern & muon & station | hits they share |
+
+### 4. The metrics
+
+```bash
+scripts/validation/compute_metrics.py tables_PG0_cpu --sample PG0 \
+  --implementation cpu --scan --output scores.csv
+```
+
+Applies the definition, appends one row to the csv and writes `muon_flags` and
+`pattern_flags` next to the tables. `--scan` prints efficiency and fake rate
+against the completeness cut, so the effect of the choice is visible rather
+than buried in a default.
+
+### 5. The figures
+
+```bash
+scripts/validation/make_plots.py tables_PG0_cpu tables_PG0_cuda \
+  --labels cpu cuda --output-dir plots/PG0
+```
+
+`efficiency.png` against pt and eta, `quality.png` for completeness and purity,
+`residuals.png` for the four angular residuals, `rates.png` for fakes and
+duplicates. Several table directories are overlaid, which is how CUDA is
+compared with the CPU reference.
+
+### 6. The event displays
+
+```bash
+scripts/validation/event_display.py patterns_PG0_cpu.root ParticleGun_MU0.root \
+  surfaces.parquet plots/PG0/displays --n-events 5
+```
+
+The counterpart of Athena's `FastRecoVisualizationTool`: the space points of the
+event in the global R-z and x-y planes, the hits of each pattern coloured, the
+direction each pattern claims, and the truth segments as dashed lines.
+
+### 7. Comparison of two runs
 
 ```bash
 scripts/validation/compare_patterns.py patterns_PG0_cpu.root patterns_PG0_cuda.root
 ```
 
-The primary check for the CUDA version: a pattern is identified by the set of
-hits it holds, and a hit by its place in the input container (bucket and index
-within it), which is stable across runs. The script exits non-zero when the two
-runs disagree, so it can be used as a regression gate.
+Two runs over the same space points, compared. Nothing in it knows which
+implementation wrote either file: the only requirement is that both runs read
+the same n-tuple through the same reader. Comparing CUDA against the CPU
+reference is one use of it; comparing two CPU runs across a change to the
+finder, or two settings of the same run, is the same operation.
 
-### Figures
+The hit is what ties the two files together, named by its place in the input
+container — bucket and index within the bucket. That name is a property of the
+input and not of the run, so it is stable across runs and independent of memory
+addresses. Neither the order of the hits in a pattern nor the order of the
+patterns in an event carries meaning.
 
-```bash
-scripts/validation/plot_performance.py --scores scores.csv \
-  --patterns patterns_*.root --output-dir plots
-```
+Equality is not required. The patterns are paired with each other first,
+greedily on the hits they share, and compared afterwards, so a pattern that lost
+one borderline hit stays one pattern with a hit difference instead of being
+reported as one missing and one appeared.
 
-One bar chart per metric across the cases, plus the sanity distributions of the
-patterns themselves: theta, phi, sector, hits per pattern, layer counts and
-patterns per event.
+Per paired pattern: shared, lost and gained hits, their Jaccard overlap, and the
+differences in theta, phi, sector, the three layer counts and the mean
+normalized residual. Per run: the patterns paired with nothing. Events only one
+run processed are named and then excluded, since counting their patterns as lost
+would say nothing about the patterns. `--output` writes the pair table as
+parquet for plotting.
+
+The exit code is non-zero when the agreement falls below `--min-matched`,
+`--min-jaccard` or `--tolerance`. The defaults demand exact agreement, which is
+what a pure reordering of the same arithmetic gives; loosen them deliberately
+once the CUDA version is known to differ, rather than ignoring a red exit. The
+driver runs the comparison by itself as soon as `GPF_IMPLEMENTATIONS` names more
+than one implementation, taking the first as the reference.
+
+It answers a different question from stage 5. This one asks how far the two runs
+drifted apart, hit by hit; the overlaid figures ask whether a run that drifted is
+still as good physically. A red exit here is a reason to look at the figures, not
+a verdict on its own.
+
+## How the validation works
+
+### Truth association
+
+`MuonFastRecoTester` associates a measurement with a truth particle through the
+sim hit behind it, `getTruthMatchedHit`. The export carries no such link, so a
+hit belongs to a muon here when its geometry identifier is one of the
+identifiers of that muon's truth segments, `Segments_hitGeoIds`, which
+`TruthSegmentWriter` fills with the surfaces of exactly those sim hits.
+
+The two differ in one direction only: a wrong hit on a right surface counts as
+matched here and never does in Athena. An MDT identifier is a tube and a strip
+identifier a gas gap, so the surface is fine-grained, but the statement is about
+surfaces and not about hits and should be quoted that way next to Athena's
+numbers.
+
+### Which muon a pattern belongs to
+
+The majority rule of `fillGlobPatternInfo`: the muon owning the most hits of the
+pattern, decided over the whole pattern and not per station. The per-station
+split exists in the tables for the analysis, exactly as it does in Athena.
+
+### The truth denominator
+
+Counted from the space points that exist and are matched, not from the truth
+segments, because "we have sim hits that haven't made it into spacepoints due to
+inefficiencies" (`MuonFastRecoTester.cxx`). Hits are deduplicated per layer of a
+sector with the MDT straws exempt, the layer being the `detLayer` field of the
+muon identifier, which the exporter fills with `sectorLayerNum()` — the quantity
+Athena deduplicates on.
+
+The pattern side is not deduplicated, in Athena either, so a ratio of the two
+can exceed one where a layer holds several hits.
+
+### What counts as found
+
+Ours, since Athena defines nothing and only stores counts. A pattern matches its
+main muon when it collected at least `--min-completeness` of that muon's
+findable precision hits and holds hits of it in at least `--min-stations`
+stations. The second mirrors the `minGroups` of the finder: a pattern confined
+to one station is not a muon candidate.
+
+### The angular residuals
+
+A pattern's theta is the polar angle of the global position of its seed hit,
+`patTheta{VectorHelpers::theta(seed->globalPosition(gctx))}`, and is never
+refitted. It is the angle of a point of the trajectory, not the direction of
+one, so the residuals are
+
+| residual | against |
+| --- | --- |
+| `dThetaSeg`, `dPhiSeg` | the position of the truth segment sharing the most identifiers with the pattern; the same kind of quantity, free of the bending |
+| `dEtaMuon`, `dPhiMuon` | the truth muon at production, the pair Athena writes as `pat_Eta` and `gen_Eta`; the toroid bends the muon in between, so this is a sanity check |
+
+`Segments_dirTheta` is deliberately unused: it is the direction of the segment,
+which the pattern does not estimate.
+
+## Known limits
+
+- No pile-up truth particles. Both particle-gun samples carry only the one or
+  two gun muons, so Athena's pile-up category cannot be reproduced and a pattern
+  built from pile-up hits in MU200 is counted as a fake. Its hits appear as
+  `nUnmatchedHits` of the pattern, which is the number to watch.
+- sTGC precision. The export does not carry the channel type, so an sTGC space
+  point counts as precision only when it measures eta alone. Athena calls a
+  strip a precision hit either way.
+- Athena demands, for a space point measuring both coordinates, that the second
+  measurement carries the same truth link before counting it as a phi hit. One
+  identifier covers the whole space point here, so a matched two dimensional hit
+  counts for both coordinates.
 
 ## Planned
 
