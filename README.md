@@ -21,11 +21,9 @@ scripts/
     run_full_validation.sh             the whole chain, every stage skippable
     run_global_pattern_validation.sh   run the finder over the configured samples
     gpfval.py                          definitions transcribed from ACTS & Athena
-    build_geometry_cache.py            tracking geometry json -> surface transforms
     build_validation_tables.py         patterns + truth -> the validation tables
     compute_metrics.py                 the tables -> efficiency, fakes, residuals
     make_plots.py                      the four figures
-    event_display.py                   single events, R-z and x-y
     compare_patterns.py                two runs, hit by hit (cpu against cuda)
 docs/
   acts_changes.md                      what this work changed in the ACTS checkout
@@ -70,12 +68,12 @@ scripts/validation/run_full_validation.sh
 ```
 
 Stages whose output exists are skipped; `GPF_FORCE=1` redoes them. Stage 1 needs
-the build machine, stages 2 to 7 run anywhere.
+the build machine, stages 2 to 5 run anywhere.
 
 Everything is written into `gpf_validation/` of this repository. The pattern
 files, `scores.csv`, the logs and the figures are tracked, so a run is
-transferred with a commit and a push; the tables and the surface cache are
-large and regenerable and are ignored. The last stage warns about any tracked
+transferred with a commit and a push; the tables are large and regenerable and
+are ignored. The last stage warns about any tracked
 output above 50 MB, since GitHub refuses files above 100 MB.
 
 ### 1. The patterns
@@ -89,17 +87,7 @@ Each case writes `patterns_<sample>_<implementation>.root` and a log into
 `GPF_SAMPLES`, `GPF_IMPLEMENTATIONS`, `GPF_MAX_EVENTS`, `GPF_GEOMETRY`,
 `GPF_OUT_DIR`, `GPF_<SAMPLE>_NTUPLE` and `GPF_FORCE`.
 
-### 2. The surfaces
-
-```bash
-scripts/validation/build_geometry_cache.py ActsTrackingGeometry.json surfaces.parquet
-```
-
-The geometry json is half a gigabyte and is needed only for the transforms of
-its sensitive surfaces, so they are extracted once. Only the event displays use
-the result.
-
-### 3. The validation tables
+### 2. The validation tables
 
 ```bash
 scripts/validation/build_validation_tables.py patterns_PG0_cpu.root \
@@ -120,7 +108,7 @@ Of the 36 branches in the truth tree it reads 7, and of the 25 in the space
 point tree it reads 8. What each test needs and why is in
 [docs/validation.md](docs/validation.md).
 
-### 4. The metrics
+### 3. The metrics
 
 ```bash
 scripts/validation/compute_metrics.py tables_PG0_cpu --sample PG0 \
@@ -132,7 +120,7 @@ Applies the definitions and appends one row to the csv, writing `muon_flags` and
 `TrackTruthMatcher`: a majority of the muon's surfaces *and* a majority of the
 pattern's hits, both at 0.5. `--scan` shows how the numbers move with it.
 
-### 5. The figures
+### 4. The figures
 
 ```bash
 scripts/validation/make_plots.py tables_PG0_cpu tables_PG0_cuda \
@@ -154,18 +142,7 @@ means is in [docs/validation.md](docs/validation.md). Fakes and duplicates are
 counts and live in the csv. Several table directories are overlaid, which is how CUDA is
 compared with the CPU reference.
 
-### 6. The event displays
-
-```bash
-scripts/validation/event_display.py patterns_PG0_cpu.root ParticleGun_MU0.root \
-  surfaces.parquet plots/PG0/displays --n-events 5
-```
-
-The counterpart of Athena's `FastRecoVisualizationTool`: the space points of the
-event in the global R-z and x-y planes, the hits of each pattern coloured, the
-direction each pattern claims, and the truth segments as dashed lines.
-
-### 7. Comparison of two runs
+### 5. Comparison of two runs
 
 ```bash
 scripts/validation/compare_patterns.py patterns_PG0_cpu.root patterns_PG0_cuda.root

@@ -64,14 +64,11 @@ Cherry-picked from his `addTransform` branch as `5a1dfb694`, `9392c8ef6` and
 ## Outside the ACTS checkout
 
 `~/cern/acts-gpf-utilities`, pushed to `timhtetyanoo/acts-gpf-utilities`: the
-validation driver, the validation tables, the metrics, the plots, the event
-displays, the run comparison and this document.
+validation driver, the validation tables, the metrics, the plots, the run
+comparison and this document.
 
 The validation needs nothing from ACTS beyond what the pattern writer and the
-space point reader already produce. In particular the event displays place the
-hits from the surface transforms of the tracking geometry json, so no global
-position has to be added to `RootMuonGlobalPatternWriter`. The composition was
-checked against the `patTheta` the Core computes in C++ and agrees to 1e-7.
+space point reader already produce.
 
 ## Before a pull request
 

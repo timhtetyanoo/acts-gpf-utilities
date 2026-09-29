@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Runs the whole chain: pattern finding, the validation tables, the metrics, the
-# figures and a few event displays. Every stage is skipped when its output is
+# Runs the whole chain: pattern finding, the validation tables, the metrics and
+# the figures. Every stage is skipped when its output is
 # already there, so a rerun only does the work that is missing.
 #
 # The first stage needs the ACTS build and therefore the build machine; all the
@@ -9,7 +9,7 @@
 # ACTS_BUILD_DIR unset to analyse pattern files that were produced elsewhere.
 #
 # Everything is written into <this repo>/gpf_validation. What is small enough to
-# push is tracked; the tables & the surface cache are ignored by .gitignore.
+# push is tracked; the tables are ignored by .gitignore.
 #
 # Optional:
 #   ACTS_BUILD_DIR   build directory; unset skips the pattern finding
@@ -21,7 +21,6 @@
 #   GPF_IMPLEMENTATIONS                                (default: "cpu")
 #   GPF_MATCHING_RATIO    ACTS's matchingRatio         (default: 0.5)
 #   GPF_MIN_STATIONS      chambers a match needs       (default: 2)
-#   GPF_DISPLAY_EVENTS    events drawn per case        (default: 5)
 #   PYTHON           python interpreter                (default: <this repo>/.venv/bin/python)
 
 set -Eeuo pipefail
@@ -33,7 +32,6 @@ out_dir="${GPF_OUT_DIR:-${repo_root}/gpf_validation}"
 scores="${GPF_SCORES:-${out_dir}/scores.csv}"
 plot_dir="${GPF_PLOT_DIR:-${out_dir}/plots}"
 geometry="${GPF_GEOMETRY:-${data_dir}/ActsTrackingGeometry.json}"
-surfaces="${out_dir}/surfaces.parquet"
 
 python="${PYTHON:-${repo_root}/.venv/bin/python}"
 command -v "${python}" >/dev/null 2>&1 || python="python3"
@@ -63,16 +61,7 @@ else
   echo "ACTS_BUILD_DIR is unset, using the pattern files already in ${out_dir}"
 fi
 
-# --- 2. the surfaces of the tracking geometry, for the event displays only --
-# The tables and the metrics need no geometry: the hits and the truth lines are
-# both given in the frame of their spectrometer sector.
-if [[ -f "${surfaces}" && "${GPF_FORCE:-0}" != "1" ]]; then
-  echo "Surface cache already built, skipping"
-else
-  "${python}" "${script_dir}/build_geometry_cache.py" "${geometry}" "${surfaces}"
-fi
-
-# --- 3. the validation tables ----------------------------------------------
+# --- 2. the validation tables ----------------------------------------------
 for sample in "${samples[@]}"; do
   for implementation in "${implementations[@]}"; do
     tag="${sample}_${implementation}"
@@ -86,7 +75,7 @@ for sample in "${samples[@]}"; do
   done
 done
 
-# --- 4. the metrics ---------------------------------------------------------
+# --- 3. the metrics ---------------------------------------------------------
 rm -f -- "${scores}"
 for sample in "${samples[@]}"; do
   for implementation in "${implementations[@]}"; do
@@ -99,7 +88,7 @@ for sample in "${samples[@]}"; do
   done
 done
 
-# --- 5. the figures, one set per sample with the implementations overlaid ---
+# --- 4. the figures, one set per sample with the implementations overlaid ---
 for sample in "${samples[@]}"; do
   tables=()
   labels=()
@@ -112,19 +101,8 @@ for sample in "${samples[@]}"; do
     --output-dir "${plot_dir}/${sample}"
 done
 
-# --- 6. a handful of event displays ----------------------------------------
-for sample in "${samples[@]}"; do
-  for implementation in "${implementations[@]}"; do
-    tag="${sample}_${implementation}"
-    "${python}" "${script_dir}/event_display.py" \
-      "${out_dir}/patterns_${tag}.root" "$(ntuple_for "${sample}")" \
-      "${surfaces}" "${plot_dir}/${sample}/displays_${implementation}" \
-      --n-events "${GPF_DISPLAY_EVENTS:-5}"
-  done
-done
-
-# --- 7. the exact comparison, once there is a second implementation --------
-# Graded agreement is in the figures of stage 5; this is the binary gate, so a
+# --- 5. the exact comparison, once there is a second implementation --------
+# Graded agreement is in the figures of stage 4; this is the binary gate, so a
 # difference is reported and does not stop the chain.
 if (( ${#implementations[@]} > 1 )); then
   reference="${implementations[0]}"
@@ -139,7 +117,7 @@ if (( ${#implementations[@]} > 1 )); then
   done
 fi
 
-# --- 8. warn about tracked files too large to push -------------------------
+# --- 6. warn about tracked files too large to push -------------------------
 # GitHub rejects files above 100 MB.
 if git -C "${repo_root}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   while IFS= read -r -d '' f; do
