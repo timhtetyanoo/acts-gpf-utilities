@@ -1,22 +1,11 @@
 #!/usr/bin/env python3
-"""Turn the validation tables into the five numbers, applying the definitions.
-
-The tables produced by build_validation_tables.py only count. Every definition
-lives here, so a definition can be changed and re-applied in a second without
-running the pattern finder again. What each test means and why it is built this
-way is in docs/validation.md; this file is only the arithmetic.
+"""Computes the following metrics:
 
     1  efficiency          found muons / all truth muons
     2  composition         purity, mismatched fraction, selectivity
     3  hits on the path    mean squared pull against the truth line
     4  fakes & duplicates  patterns matching nothing, muons matched twice
     5  direction           the pattern's eta and phi against the muon's
-
-The matching criterion is ACTS's, from TrackTruthMatcher: a pattern matches a
-muon when it holds a majority of that muon's findable surfaces *and* a majority
-of its own hits are that muon's, both at 0.5, which is `matchingRatio` with
-`doubleMatching` enabled. Requiring both is what stops a pattern that swept up a
-whole chamber from counting as having found the muon it caught on the way.
 """
 
 from __future__ import annotations
@@ -28,9 +17,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-#: ACTS's matchingRatio, used on both sides of the match
+# Threshold for the pattern to be considered a muon candidate
 MATCHING_RATIO = 0.5
-#: A pattern confined to one chamber is not a muon candidate
+#: Minimum number of stations that the pattern must cross to be considered a muon candidate
 MIN_STATIONS = 2
 
 
@@ -51,14 +40,12 @@ def derive(data: dict[str, pd.DataFrame], matching_ratio: float,
         return np.where(denominator > 0,
                         numerator / denominator.replace(0, np.nan), np.nan)
 
-    # test 1 and test 2, all from counts already in the table
     patterns["completeness"] = ratio(patterns["shared"],
                                      patterns["findable"].fillna(0))
     patterns["purity"] = ratio(patterns["nHitsMainMuon"], patterns["nHits"])
     patterns["mismatched"] = ratio(patterns["nHitsOtherMuon"], patterns["nHits"])
     patterns["selectivity"] = ratio(patterns["nHits"], patterns["nAvailable"])
 
-    # test 3, summarised per pattern over the chambers it crossed
     chamber = data["pattern_chamber"]
     if len(chamber):
         per_pattern = chamber.groupby(["event", "pattern"]).apply(
@@ -72,9 +59,11 @@ def derive(data: dict[str, pd.DataFrame], matching_ratio: float,
     else:
         patterns[["meanSqPull", "nHitsNoSegment"]] = np.nan
 
-    # ACTS's double matching: a majority of the muon and a majority of the
-    # pattern, plus the requirement that the pattern followed the muon across
-    # more than one chamber
+    # The pattern is considered a muon candidate if it meets the following criteria:
+    # - The pattern has a main muon assigned to it
+    # - The pattern's completeness is greater than or equal to the matching ratio
+    # - The pattern's purity is greater than or equal to the matching ratio
+    # - The pattern has crossed at least min_stations stations
     patterns["isMatch"] = (
         (patterns["mainMuon"] >= 0)
         & (patterns["completeness"] >= matching_ratio)
@@ -82,8 +71,7 @@ def derive(data: dict[str, pd.DataFrame], matching_ratio: float,
         & (patterns["stationsWithMuon"] >= min_stations)
     )
 
-    # the best pattern of a muon is the one sharing the most of it; the rest are
-    # duplicates, and are not fakes
+    # The pattern with the most shared hits is chosen for the muon; the rest are duplicates, and are not fakes
     ranked = patterns[patterns["isMatch"]].sort_values("shared", ascending=False)
     best = ranked.drop_duplicates(["event", "mainMuon"])
     patterns["isDuplicate"] = patterns["isMatch"] & ~patterns.index.isin(best.index)
@@ -95,7 +83,7 @@ def derive(data: dict[str, pd.DataFrame], matching_ratio: float,
                          "phi": "patternPhi"}),
         on=["event", "muon"], how="left")
     muons["found"] = muons["pattern"].notna()
-    # test 5: the pattern's direction against the muon's at production
+
     muons["dEta"] = muons["patternEta"] - muons["eta"]
     muons["dPhi"] = (muons["patternPhi"] - muons["phi"] + np.pi) % (2 * np.pi) - np.pi
 
@@ -114,34 +102,59 @@ def metrics(patterns: pd.DataFrame, muons: pd.DataFrame) -> dict:
     unmatched = patterns[~patterns["isMatch"]]
 
     out = {
+        # Number of events that contain at least one pattern.
         "events": events,
+        # Number of truth muons in the sample.
         "truth_muons": len(muons),
+        # Number of patterns the pattern finder produced.
         "patterns": len(patterns),
-        # 1. efficiency, over every truth muon with no acceptance cut
+
+        # 1. Efficiency
+        # Fraction of truth muons that have at least one matching pattern.
+        # 1 means every muon was found.
         "efficiency": len(found) / len(muons) if len(muons) else 0.0,
+        # Fraction of the surfaces where the muon left a hit that the pattern contains.
+        # Averaged over all found muons. 1 means no hit was missed.
         "mean_completeness": float(found["completeness"].mean()) if len(found) else np.nan,
-        # 2. what the matched patterns are made of
+
+        # 2. Composition
+        # Fraction of a pattern's hits that belong to the muon it was matched
+        # to. Averaged over matched patterns. 1 means no foreign hits.
         "mean_purity": float(matched["purity"].mean()) if len(matched) else np.nan,
+        # Fraction of a pattern's hits that belong to a different truth muon.
+        # Averaged over matched patterns. 0 means no hits from another muon.
         "mean_mismatched": float(matched["mismatched"].mean()) if len(matched) else np.nan,
+        # Fraction of the hits selected by the pattern over the hits available in the buckets it drew from. 
+        # Averaged over matched patterns. Low means the finder rejected most of the hits around the muon.
         "mean_selectivity": float(matched["selectivity"].mean()) if len(matched) else np.nan,
-        # 3. are those hits on the muon's path
+
+        # 3. Hits on the path
+        # The mean squared pull of the muon's hits about its truth line.
+        # Averaged over matched patterns. About 1 is ideal; much larger means
+        # the hits are further from the truth than their errors say.
         "median_meanSqPull": float(matched["meanSqPull"].median()) if len(matched) else np.nan,
-        # 4. patterns that matched no truth muon. Whether one of those is a
-        # fake depends on the sample: without pile-up every particle that
-        # crossed the spectrometer is in the truth tree, so it is one, while a
-        # pattern of a pile-up muon has nothing to match and cannot be told from
-        # a fake. The count is the same either way, so it is reported under the
-        # name that is true either way.
+        
+        # 4. Fakes & Duplicates
+        # Average number of patterns per event.
         "patterns_per_event": len(patterns) / events if events else 0.0,
+        # Average number of patterns per event that matched no truth muon.
+        # 0 is ideal.
         "unmatched_per_event": len(unmatched) / events if events else 0.0,
+        # Fraction of all patterns that matched no truth muon. 0 is ideal.
         "unmatched_fraction": len(unmatched) / len(patterns) if len(patterns) else 0.0,
+        # Average number of duplicates per found muon. 0 is ideal.
         "duplicates_per_found_muon": (float(muons["nDuplicates"].sum() / len(found))
                                       if len(found) else 0.0),
-        # 5. direction
+
+        # 5. Direction
+        # Mean of the difference in eta between the pattern and the muon. 0 means the pattern eta is not systematically off.
         "dEta_mean": float(found["dEta"].mean()) if len(found) else np.nan,
-        "dEta_rms": float(found["dEta"].std()) if len(found) else np.nan,
+        # Spread (standard deviation) of the difference in eta between the pattern and the muon. Smaller is better.
+        "dEta_std": float(found["dEta"].std()) if len(found) else np.nan,
+        # Mean of the difference in phi between the pattern and the muon. 0 means the pattern phi is not systematically off.
         "dPhi_mean": float(found["dPhi"].mean()) if len(found) else np.nan,
-        "dPhi_rms": float(found["dPhi"].std()) if len(found) else np.nan,
+        # Spread (standard deviation) of the difference in phi between the pattern and the muon. Smaller is better.
+        "dPhi_std": float(found["dPhi"].std()) if len(found) else np.nan,
     }
     return out
 

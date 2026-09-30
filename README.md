@@ -127,20 +127,18 @@ scripts/validation/make_plots.py tables_PG0_cpu tables_PG0_cuda \
   --labels cpu cuda --output-dir plots/PG0
 ```
 
-One quantity per figure, named as ACTS's own validation tools name their
-histograms — the quantity first, then the variable it is binned against, with
-the sample prefixed so a figure identifies itself once copied out:
+One figure per test, with the quantities of that test side by side:
 
 ```text
-PG0_patteff_vs_eta.png    PG0_purity.png         PG0_pull_truthline.png
-PG0_patteff_vs_pt.png     PG0_selectivity.png    PG0_res_eta.png
-                          PG0_mismatched.png     PG0_res_phi.png
+efficiency.png     against truth pT and truth eta
+composition.png    purity, selectivity, mismatched fraction
+pulls.png          how far the hits sit from the muon's path
+direction.png      the eta residual, and the phi residual
 ```
 
-An axis carries the name of its quantity, not its definition; what each one
-means is in [docs/validation.md](docs/validation.md). Fakes and duplicates are
-counts and live in the csv. Several table directories are overlaid, which is how CUDA is
-compared with the CPU reference.
+Fakes and duplicates are counts and live in the csv. What each panel means is
+in [docs/validation.md](docs/validation.md). Several table directories are
+overlaid, which is how CUDA is compared with the CPU reference.
 
 ### 5. Comparison of two runs
 
