@@ -4,10 +4,29 @@
 # resulting pattern files for the offline validation. Finished cases are skipped,
 # so the script can be re-run after adding a sample or an implementation.
 #
+# Two drivers produce the same pattern file. GPF_DRIVER picks between them:
+#
+#   python  Examples/Scripts/Python/muon_global_pattern_finder.py, run through
+#           the Sequencer. Threads, an event offset and a per algorithm timing
+#           file come with it, and configuration is a command line rather than a
+#           rebuild. Needs the python bindings in the build and ACTS_SOURCE_DIR
+#   test    bin/ActsUnitTestGlobalPatternFinderData, a Boost test looping over
+#           the events by hand. One thread, no timing, but it asserts on what it
+#           finds and needs nothing but the build
+#
+# They should agree exactly. compare_patterns.py checks that:
+#   compare_patterns.py patterns_PG0_test.root patterns_PG0_python.root
+#
 # Required:
-#   ACTS_BUILD_DIR        build directory holding bin/ActsUnitTestGlobalPatternFinderData
+#   ACTS_BUILD_DIR        build directory; for the python driver it also has to
+#                         hold python/ with the bindings
+#   ACTS_SOURCE_DIR       ACTS source tree            (python driver only)
 #
 # Optional:
+#   GPF_DRIVER            python | test                    (default: python)
+#   GPF_THREADS           threads of the sequencer         (default: 1)
+#   GPF_TAG_SUFFIX        appended to the file names, so that two runs of the
+#                         same sample can be kept side by side and compared
 #   GPF_DATA_DIR          n-tuples & tracking geometry     (default: <this repo>/data)
 #   GPF_OUT_DIR           output directory                 (default: <this repo>/gpf_validation)
 #   GPF_GEOMETRY          tracking geometry json           (default: ${GPF_DATA_DIR}/ActsTrackingGeometry.json)
@@ -28,15 +47,44 @@ build_dir="${ACTS_BUILD_DIR:?ACTS_BUILD_DIR is not set}"
 data_dir="${GPF_DATA_DIR:-${repo_root}/data}"
 out_dir="${GPF_OUT_DIR:-${repo_root}/gpf_validation}"
 geometry="${GPF_GEOMETRY:-${data_dir}/ActsTrackingGeometry.json}"
+driver="${GPF_DRIVER:-python}"
 executable="${build_dir}/bin/ActsUnitTestGlobalPatternFinderData"
+finder_script="${ACTS_SOURCE_DIR:-}/Examples/Scripts/Python/muon_global_pattern_finder.py"
+python="${PYTHON:-${repo_root}/.venv/bin/python}"
+command -v "${python}" >/dev/null 2>&1 || python="python3"
 
 read -r -a samples <<<"${GPF_SAMPLES:-PG0 PG200}"
 read -r -a implementations <<<"${GPF_IMPLEMENTATIONS:-cpu}"
 
-if [[ ! -x "${executable}" ]]; then
-  echo "Executable not found: ${executable}" >&2
-  exit 1
-fi
+case "${driver}" in
+  test)
+    if [[ ! -x "${executable}" ]]; then
+      echo "Executable not found: ${executable}" >&2
+      exit 1
+    fi
+    ;;
+  python)
+    if [[ -z "${ACTS_SOURCE_DIR:-}" ]]; then
+      echo "ACTS_SOURCE_DIR is not set, needed by the python driver" >&2
+      exit 1
+    fi
+    if [[ ! -f "${finder_script}" ]]; then
+      echo "Run script not found: ${finder_script}" >&2
+      exit 1
+    fi
+    # the bindings are an option of the build, so say so here rather than
+    # letting the import fail inside the script
+    if [[ ! -d "${build_dir}/python" ]]; then
+      echo "No python bindings in ${build_dir}; configure ACTS with them or" >&2
+      echo "use GPF_DRIVER=test" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "GPF_DRIVER has to be python or test, not ${driver}" >&2
+    exit 1
+    ;;
+esac
 if [[ ! -f "${geometry}" ]]; then
   echo "Tracking geometry not found: ${geometry}" >&2
   exit 1
@@ -62,7 +110,7 @@ run_case() {
   local sample="$1"
   local implementation="$2"
   local ntuple="$3"
-  local tag="${sample}_${implementation}"
+  local tag="${sample}_${implementation}${GPF_TAG_SUFFIX:-}"
   local output="${out_dir}/patterns_${tag}.root"
   local log="${out_dir}/logs/${tag}.log"
 
@@ -71,14 +119,28 @@ run_case() {
     return
   fi
 
-  echo "Running ${tag}"
-  ACTS_GPF_NTUPLE="${ntuple}" \
-  ACTS_GPF_GEOMETRY="${geometry}" \
-  ACTS_GPF_OUTPUT="${output}" \
-  ACTS_GPF_MAX_EVENTS="${GPF_MAX_EVENTS:-}" \
-  ACTS_GPF_IMPLEMENTATION="${implementation}" \
-    "${executable}" --log_level=message --report_level=no --color_output=no \
-    2>&1 | tee -- "${log}"
+  echo "Running ${tag} with the ${driver} driver"
+  if [[ "${driver}" == "python" ]]; then
+    # the bindings live in the build, the script in the source tree
+    PYTHONPATH="${build_dir}/python:${PYTHONPATH:-}" \
+      "${python}" "${finder_script}" \
+        --input "${ntuple}" \
+        --geometry "${geometry}" \
+        --output "${output}" \
+        --nEvents "${GPF_MAX_EVENTS:-0}" \
+        --threads "${GPF_THREADS:-1}" \
+        --timingDir "${out_dir}/logs" \
+        --timingFile "timing_${tag}.csv" \
+      2>&1 | tee -- "${log}"
+  else
+    ACTS_GPF_NTUPLE="${ntuple}" \
+    ACTS_GPF_GEOMETRY="${geometry}" \
+    ACTS_GPF_OUTPUT="${output}" \
+    ACTS_GPF_MAX_EVENTS="${GPF_MAX_EVENTS:-}" \
+    ACTS_GPF_IMPLEMENTATION="${implementation}" \
+      "${executable}" --log_level=message --report_level=no --color_output=no \
+      2>&1 | tee -- "${log}"
+  fi
 
   if [[ ! -f "${output}" ]]; then
     echo "No pattern file was written for ${tag}, see ${log}" >&2

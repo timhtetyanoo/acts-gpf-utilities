@@ -373,9 +373,16 @@ def main() -> int:
                 })
 
     args.output.mkdir(parents=True, exist_ok=True)
-    for name, rows in (("muons", muon_rows), ("patterns", pattern_rows),
-                       ("pattern_chamber", chamber_rows)):
+    # the rows are written in a fixed order rather than in the order the events
+    # happened to arrive in, so that a run over the same input gives the same
+    # table whatever the sequencer's threads did
+    for name, rows, keys in (
+            ("muons", muon_rows, ["event", "muon"]),
+            ("patterns", pattern_rows, ["event", "pattern"]),
+            ("pattern_chamber", chamber_rows, ["event", "pattern", "station"])):
         frame = pd.DataFrame(rows)
+        if len(frame):
+            frame = frame.sort_values(keys, kind="stable").reset_index(drop=True)
         frame.to_parquet(args.output / f"{name}.parquet", index=False)
         print(f"{name:<16} {len(frame):>8} rows")
     print(f"\nWrote the tables of {len(event_numbers)} events to {args.output}")

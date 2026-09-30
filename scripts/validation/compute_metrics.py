@@ -71,8 +71,16 @@ def derive(data: dict[str, pd.DataFrame], matching_ratio: float,
         & (patterns["stationsWithMuon"] >= min_stations)
     )
 
-    # The pattern with the most shared hits is chosen for the muon; the rest are duplicates, and are not fakes
-    ranked = patterns[patterns["isMatch"]].sort_values("shared", ascending=False)
+    # The pattern with the most shared hits is chosen for the muon; the rest are
+    # duplicates, and are not fakes. Ties are broken on the pattern itself and
+    # never on the order of the rows: the sequencer returns the events in
+    # whatever order its threads finish them, and which pattern represents a
+    # muon must not depend on that. Purity, then the distance of the hits from
+    # the muon's line, then the index the finder gave the pattern inside its own
+    # event, which is the same however the events were scheduled.
+    ranked = patterns[patterns["isMatch"]].sort_values(
+        ["shared", "purity", "meanSqPull", "pattern"],
+        ascending=[False, False, True, True], kind="stable")
     best = ranked.drop_duplicates(["event", "mainMuon"])
     patterns["isDuplicate"] = patterns["isMatch"] & ~patterns.index.isin(best.index)
 
