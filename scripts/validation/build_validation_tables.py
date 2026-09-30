@@ -182,8 +182,8 @@ def main() -> int:
                                 for a in "XYZ"], axis=1).astype(float)
         sp_drift = ak.to_numpy(sp_event["spacePoint_driftRadius"]).astype(float)
         sp_variance = ak.to_numpy(sp_event["spacePoint_covLoc0"]).astype(float)
-        # the category and the station of every hit of the event, needed for
-        # the counts taken over a whole bucket rather than over a pattern
+        # category and station of every hit of the event, for the counts taken
+        # over a whole bucket
         sp_decoded = gpfval.decode_muon_id(
             ak.to_numpy(sp_event["spacePoint_muonId"]))
         sp_category = gpfval.hit_categories(sp_decoded)
@@ -210,8 +210,7 @@ def main() -> int:
                        for geo_id in ids}
 
         for muon in range(len(truth_event["Muons_pt"])):
-            # the hits the muon left, as the rows of the event that its truth
-            # segments claim: the gen_N*Meas branches count these
+            # the rows the muon's truth segments claim
             mine = np.array([row_of_geo[g] for g in sorted(
                 per_muon.get(muon, set()) & available)], dtype=int)
             on_muon = np.zeros(len(sp_geo), dtype=bool)
@@ -265,17 +264,14 @@ def main() -> int:
             found, counts = np.unique(owners[owners >= 0], return_counts=True)
             main = int(found[np.argmax(counts)]) if len(found) else -1
             is_main = owners == main if main >= 0 else np.zeros(len(owners), bool)
-            # the same flag over all hits of the event, so it can be combined
-            # with the category masks, which are not compressed to the pattern
+            # the same flag over all hits of the event, for the category masks
             is_main_all = np.zeros(len(hit_pattern), dtype=bool)
             is_main_all[np.flatnonzero(mine)] = is_main
 
             buckets = np.unique(hit_bucket[mine])
-            # every hit of every bucket the pattern drew from, split the same
-            # way: the denominator the pat_NAll*Meas branches carry
+            # every hit of every bucket the pattern drew from
             in_buckets = np.isin(sp_bucket, buckets)
-            # the muons sharing at least one hit, most-shared first, which is the
-            # order pat_truthMatched is read in: getTruthPar takes element [0]
+            # muons sharing at least one hit, most-shared first
             ranked = sorted(
                 ((int(np.count_nonzero(owners == m)), int(m)) for m in found),
                 reverse=True) if len(found) else []
@@ -285,8 +281,7 @@ def main() -> int:
                 "matchedMuons": [m for _, m in ranked],
                 "nStations": len(stations_present),
                 "sector": int(patterns["pattern_sector"][entry][pattern]),
-                # the side of the first hit of the first station, as Athena's
-                # tester reads it off the sector of that hit
+                # side of the first hit of the first station
                 "side": int(hit_side[mine][
                     np.argmax(stations == stations_present[0])])
                         if len(stations_present) else 0,
@@ -373,9 +368,8 @@ def main() -> int:
                 })
 
     args.output.mkdir(parents=True, exist_ok=True)
-    # the rows are written in a fixed order rather than in the order the events
-    # happened to arrive in, so that a run over the same input gives the same
-    # table whatever the sequencer's threads did
+    # a fixed row order, so the tables do not depend on the order the sequencer
+    # returned the events in
     for name, rows, keys in (
             ("muons", muon_rows, ["event", "muon"]),
             ("patterns", pattern_rows, ["event", "pattern"]),
@@ -384,8 +378,8 @@ def main() -> int:
         if len(frame):
             frame = frame.sort_values(keys, kind="stable").reset_index(drop=True)
         frame.to_parquet(args.output / f"{name}.parquet", index=False)
-        print(f"{name:<16} {len(frame):>8} rows")
-    print(f"\nWrote the tables of {len(event_numbers)} events to {args.output}")
+        print(f"{name:<16}{len(frame):>8} rows")
+    print(f"{args.output}  {len(event_numbers)} events")
     return 0
 
 

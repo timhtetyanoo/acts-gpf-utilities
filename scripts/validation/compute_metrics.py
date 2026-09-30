@@ -211,7 +211,7 @@ def main() -> int:
     if args.output:
         pd.DataFrame([summary]).to_csv(
             args.output, mode="a", header=not args.output.exists(), index=False)
-        print(f"\nAppended the summary to {args.output}")
+        print(f"\n{args.output}")
     return 0
 
 

@@ -1,30 +1,18 @@
-#!/usr/bin/env python3
-"""Write the validation tables out in the n-tuple format of MuonFastRecoValidation.
+"""Write the validation tables as a MuonFastRecoTest tree.
 
-The plotting package at gitlab.cern.ch/atlas-muon-software/houghidipuffvalidation
-reads a tree called `MuonFastRecoTest` whose branches are declared in
-MuonFastRecoValidTuple.h on the `LeonardoDev` branch. That tree is what Athena's
-MuonFastRecoTester writes, so producing it here lets the same executables plot
-the patterns the ACTS example found, with no change to either repository.
+Branch layout: MuonFastRecoValidTuple.h, houghidipuffvalidation, branch
+LeonardoDev. Counts only; the matching thresholds are applied on the reading
+side by MuonFastRecoValidTupleHelpers.
 
-Only counts are written. Every threshold stays on the reading side, in
-MuonFastRecoValidTupleHelpers: `pat_truthMatched` lists every muon sharing a hit,
-most-shared first, and their `effQuality` decides what counts as found. The
-numbers of compute_metrics.py are therefore not reproduced but compared against.
+Not filled:
 
-Three groups of branches cannot be filled from the export and are written as
-zeros, which leaves the plots that use them empty and breaks nothing:
+    pat_NPileup*                   no space point to truth particle link in the
+                                   export, so a pileup hit cannot be separated
+                                   from an unassociated one
+    runNumber, lbNumber, bcid      absent from the export
+    mcChannelNumber, mcEventWeight absent from the export
 
-    pat_NPileup*    needs the xAOD::MuonSimHit behind a measurement, which
-                    decides pileup in MuonFastRecoTester::isTruthMatched. The
-                    export carries no link from a space point to a truth
-                    particle, so a pileup muon's hit cannot be told from cavern
-                    background or from a hit whose segment was not reconstructed
-    runNumber,      not in the export. Read only in a debug printout,
-    lbNumber,       FastRecoValidation.cxx:566
-    bcid
-    mcChannelNumber not in the export, unused by the plots
-    mcEventWeight
+Transverse momentum is converted from GeV to MeV.
 """
 
 from __future__ import annotations
@@ -43,12 +31,10 @@ import gpfval
 #: The tree MuonFastRecoValidTupleHelpers::intree names
 TREE = "MuonFastRecoTest"
 
-#: The export stores the transverse momentum in GeV, the tuple in MeV: its
-#: selections read `gen_Pt() * 1.e-3` and compare against a threshold in GeV
+#: The export stores the transverse momentum in GeV, the tuple in MeV
 PT_TO_MEV = 1.0e3
 
-#: Widest value a UChar_t branch holds. Athena's own writer uses
-#: MatrixBranch<unsigned char> for these, so it wraps where this saturates
+#: Widest value a UChar_t branch holds
 UCHAR_MAX = 255
 
 #: table column -> branch name, for the three populations counted per station
@@ -71,7 +57,7 @@ GEN_COUNTS = {
 
 
 class Saturation:
-    """Counts how much had to be thrown away to fit the branches' UChar_t."""
+    """Counts the values that did not fit a UChar_t branch."""
 
     def __init__(self):
         self.clipped = 0
@@ -97,9 +83,7 @@ def jagged(values, dtype):
 
 def build(muons: pd.DataFrame, patterns: pd.DataFrame, saturation: Saturation):
     """Group the two tables by event and return the branches of the tree."""
-    # every event of the pattern file takes part, including the ones where no
-    # pattern was found: those events hold truth muons that were missed, which
-    # is the denominator of the efficiency
+    # events without a pattern carry the muons that were missed
     events = sorted(set(muons["event"]) | set(patterns["event"]))
     by_muon = {event: frame for event, frame in muons.groupby("event")}
     by_pattern = {event: frame for event, frame in patterns.groupby("event")}
@@ -156,13 +140,10 @@ def build(muons: pd.DataFrame, patterns: pd.DataFrame, saturation: Saturation):
     }
     for branch, rows in {**gen_counts, **pat_counts}.items():
         branches[branch] = jagged(saturation.narrow(rows), np.uint8)
-    # nothing in the export distinguishes a pileup muon's hit, see the module
-    # doc string; the zeros keep isFromPileupMuon() false and the plots empty
     for branch in ("pat_NPileupPrecMeas", "pat_NPileupNonPrecMeas",
                    "pat_NPileupPhiMeas"):
         branches[branch] = jagged(
             [[[0] * gpfval.N_STATIONS] * n for n in n_patterns], np.uint8)
-    # absent from the export, written so the branches exist
     n_events = len(events)
     for branch, dtype in (("runNumber", np.uint32), ("lbNumber", np.uint32),
                           ("bcid", np.uint32), ("mcChannelNumber", np.uint32)):
@@ -188,14 +169,13 @@ def main() -> int:
     with uproot.recreate(args.output) as file:
         file[TREE] = branches
 
-    print(f"Wrote {len(branches['eventNumber'])} events, "
-          f"{int(branches['pat_nPatterns'].sum())} patterns and "
-          f"{len(muons)} truth muons to {args.output}:{TREE}")
     if saturation.clipped:
-        print(f"Saturated {saturation.clipped} station counts at {UCHAR_MAX}, "
-              f"the largest was {saturation.largest}. The branches are UChar_t "
-              f"and a bucket holds more hits than that; Athena's own writer "
-              f"wraps here instead.")
+        print(f"warning: {saturation.clipped} station counts saturated at "
+              f"{UCHAR_MAX}, maximum {saturation.largest}", file=sys.stderr)
+    print(f"{args.output}:{TREE}  "
+          f"{len(branches['eventNumber'])} events, "
+          f"{int(branches['pat_nPatterns'].sum())} patterns, "
+          f"{len(muons)} truth muons")
     return 0
 
 

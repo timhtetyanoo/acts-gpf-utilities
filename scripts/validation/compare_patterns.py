@@ -162,36 +162,33 @@ def report(table: pd.DataFrame, args, only_reference, only_compared) -> int:
     identical = int((paired["jaccard"] == 1.0).sum()) if len(paired) else 0
     matched_fraction = len(paired) / n_reference if n_reference else 1.0
 
-    print(f"Events in both runs        {table['event'].nunique()}")
     if only_reference or only_compared:
-        print(f"Events only in the reference   {len(only_reference)}")
-        print(f"Events only in the comparison  {len(only_compared)}")
-        print("  the two runs did not process the same events, so the numbers "
-              "below cover the common ones only")
-    print(f"Patterns, reference        {n_reference}")
-    print(f"Patterns, compared         {n_compared}")
-    print(f"Matched to each other      {len(paired)}  "
-          f"({matched_fraction:.4f} of the reference)")
-    print(f"  of those identical       {identical}")
-    print(f"Only in the reference      {len(lost)}")
-    print(f"Only in the comparison     {len(gained)}")
+        print(f"warning: events only in reference {len(only_reference)}, only "
+              f"in comparison {len(only_compared)}; common events only below",
+              file=sys.stderr)
+    print(f"{'events':<28}{table['event'].nunique()}")
+    print(f"{'patterns reference':<28}{n_reference}")
+    print(f"{'patterns compared':<28}{n_compared}")
+    print(f"{'paired':<28}{len(paired)}  ({matched_fraction:.4f})")
+    print(f"{'paired identical':<28}{identical}")
+    print(f"{'unpaired reference':<28}{len(lost)}")
+    print(f"{'unpaired compared':<28}{len(gained)}")
     if len(paired):
-        print(f"Hit agreement, jaccard     mean {paired['jaccard'].mean():.6f}, "
-              f"min {paired['jaccard'].min():.6f}")
-        print(f"  hits only in reference   {int(paired['onlyRef'].sum())}")
-        print(f"  hits only in comparison  {int(paired['onlyCmp'].sum())}")
-        print(f"|dTheta|                   max {paired['dTheta'].abs().max():.3e}")
-        print(f"|dPhi|                     max {paired['dPhi'].abs().max():.3e}")
+        print(f"{'jaccard mean':<28}{paired['jaccard'].mean():.6f}")
+        print(f"{'jaccard min':<28}{paired['jaccard'].min():.6f}")
+        print(f"{'hits only reference':<28}{int(paired['onlyRef'].sum())}")
+        print(f"{'hits only compared':<28}{int(paired['onlyCmp'].sum())}")
+        print(f"{'max |dTheta|':<28}{paired['dTheta'].abs().max():.3e}")
+        print(f"{'max |dPhi|':<28}{paired['dPhi'].abs().max():.3e}")
         for column, label in (("dSector", "sector"),
                               ("dPrecisionLayers", "precision layers"),
                               ("dTriggerLayers", "trigger layers"),
                               ("dPhiLayers", "phi layers")):
-            differing = int((paired[column] != 0).sum())
-            print(f"Pairs disagreeing on the {label:<17} {differing}")
+            print(f"{'differing ' + label:<28}{int((paired[column] != 0).sum())}")
 
     worst = paired[paired["jaccard"] < 1.0].nsmallest(args.max_reported, "jaccard")
     if len(worst):
-        print(f"\nThe {len(worst)} least similar pairs:")
+        print(f"\nleast similar pairs ({len(worst)}):")
         for _, row in worst.iterrows():
             print(f"  event {int(row['event'])}: reference {int(row['reference'])} "
                   f"vs compared {int(row['compared'])}, {int(row['shared'])} shared, "
@@ -200,24 +197,23 @@ def report(table: pd.DataFrame, args, only_reference, only_compared) -> int:
 
     failures = []
     if matched_fraction < args.min_matched:
-        failures.append(f"only {matched_fraction:.4f} of the reference patterns "
-                        f"found a partner, {args.min_matched} required")
+        failures.append(f"paired fraction {matched_fraction:.4f} < "
+                        f"{args.min_matched}")
     if len(paired):
         if paired["jaccard"].min() < args.min_jaccard:
-            failures.append(f"a pair shares only {paired['jaccard'].min():.4f} of "
-                            f"its hits, {args.min_jaccard} required")
+            failures.append(f"jaccard min {paired['jaccard'].min():.4f} < "
+                            f"{args.min_jaccard}")
         if paired["dTheta"].abs().max() > args.tolerance:
-            failures.append(f"theta differs by {paired['dTheta'].abs().max():.3e}, "
-                            f"more than {args.tolerance:.3e}")
+            failures.append(f"max |dTheta| {paired['dTheta'].abs().max():.3e} > "
+                            f"{args.tolerance:.3e}")
         if paired["dPhi"].abs().max() > args.tolerance:
-            failures.append(f"phi differs by {paired['dPhi'].abs().max():.3e}, "
-                            f"more than {args.tolerance:.3e}")
+            failures.append(f"max |dPhi| {paired['dPhi'].abs().max():.3e} > "
+                            f"{args.tolerance:.3e}")
     if failures:
-        print("\nDisagreement:")
         for failure in failures:
-            print(f"  {failure}")
+            print(f"differ: {failure}", file=sys.stderr)
         return 1
-    print("\nThe two runs agree within the tolerances.")
+    print("\nagree")
     return 0
 
 
@@ -251,7 +247,7 @@ def main() -> int:
                     {e: compared[e] for e in common})
     if args.output:
         table.to_parquet(args.output, index=False)
-        print(f"Wrote the pattern by pattern table to {args.output}\n")
+        print(f"{args.output}\n")
     return report(table, args, only_reference, only_compared)
 
 

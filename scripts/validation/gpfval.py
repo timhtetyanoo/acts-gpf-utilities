@@ -105,23 +105,21 @@ def direction(phi_degrees, theta_degrees):
 
 
 def station_index(station_name):
-    """Station of a chamber, the counterpart of MuonStationIndex::toStationIndex.
+    """Station of a chamber, MuonStationIndex::toStationIndex(ChIndex).
 
-    The pattern file already records this quantity per hit as `hit_station`; the
-    space points of the n-tuple carry the chamber in their identifier instead,
-    so the counts taken over a whole bucket need the conversion.
+    The pattern file records it per hit as `hit_station`; the space points of
+    the n-tuple carry the chamber in their identifier instead.
     """
     name = np.asarray(station_name, dtype=int)
     return STATION_OF_CHAMBER[np.clip(name, 0, len(STATION_OF_CHAMBER) - 1)]
 
 
 def hit_categories(decoded):
-    """Split hits into the three populations MuonFastRecoTester counts per station.
+    """Split hits into the three populations counted per station.
 
-    Precision is isPrecisionHit() from MuonSpacePoint/SpacePointHelpers: a tube
-    or a micromega, or an sTgc strip. A strip is the only sTgc measuring the
-    precision coordinate alone, which is how it is told apart from a pad without
-    the channel type the export does not carry.
+    Precision is isPrecisionHit() from MuonSpacePoint/SpacePointHelpers: a tube,
+    a micromega, or an sTgc measuring the precision coordinate alone, which is
+    the strip.
     """
     tech = decoded["technology"]
     measures_eta = decoded["measuresEta"]
@@ -135,12 +133,9 @@ def hit_categories(decoded):
 def per_station(mask, stations):
     """Count the hits selected by `mask`, one entry per station.
 
-    The inner vector of every pat_N*Meas and gen_N*Meas branch, which is indexed
-    by StIndex over its full range whether a station was crossed or not.
-
-    Counted in a wide type on purpose. The branches are UChar_t, but a bucket at
-    high occupancy holds more than 255 hits in one station, so the narrowing is
-    left to the writer, which saturates and says how often it had to.
+    The inner vector of every pat_N*Meas and gen_N*Meas branch, indexed by
+    StIndex over its full range. Counted in int32; the branches are UChar_t and
+    the narrowing happens in the writer.
     """
     counts = np.zeros(N_STATIONS, dtype=np.int32)
     if len(stations) == 0:
@@ -154,9 +149,8 @@ def per_station(mask, stations):
 def expanded_sector_pair(expanded):
     """The two ms sectors an expanded sector spans, as pat_Sector1 & pat_Sector2.
 
-    A transcription of ExpandedSector::msSectorAndProj, ::msSector and
-    ::adjacentMsSector. The two are equal when the pattern sits in the centre of
-    a sector rather than in an overlap, which is what isSectorOverlap() tests.
+    ExpandedSector::msSectorAndProj, ::msSector and ::adjacentMsSector. Equal
+    outside an overlap region.
     """
     expanded = int(expanded)
     if expanded in (0, 1):
