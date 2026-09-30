@@ -25,6 +25,7 @@
 # Optional:
 #   GPF_DRIVER            python | test                    (default: python)
 #   GPF_THREADS           threads of the sequencer         (default: 1)
+#   GPF_PYTHON            interpreter ACTS was built against   (default: python3)
 #   GPF_TAG_SUFFIX        appended to the file names, so that two runs of the
 #                         same sample can be kept side by side and compared
 #   GPF_DATA_DIR          n-tuples & tracking geometry     (default: <this repo>/data)
@@ -50,8 +51,9 @@ geometry="${GPF_GEOMETRY:-${data_dir}/ActsTrackingGeometry.json}"
 driver="${GPF_DRIVER:-python}"
 executable="${build_dir}/bin/ActsUnitTestGlobalPatternFinderData"
 finder_script="${ACTS_SOURCE_DIR:-}/Examples/Scripts/Python/muon_global_pattern_finder.py"
-python="${PYTHON:-${repo_root}/.venv/bin/python}"
-command -v "${python}" >/dev/null 2>&1 || python="python3"
+# the bindings are a compiled extension and import only under the interpreter
+# ACTS was built against
+python="${GPF_PYTHON:-python3}"
 
 read -r -a samples <<<"${GPF_SAMPLES:-PG0 PG200}"
 read -r -a implementations <<<"${GPF_IMPLEMENTATIONS:-cpu}"
