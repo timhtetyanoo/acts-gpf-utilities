@@ -39,7 +39,7 @@ import gpfval
 #: Truth muons and the surfaces they crossed
 TRUTH_BRANCHES = [
     "event_id",
-    "Muons_pt", "Muons_eta", "Muons_phi",
+    "Muons_pt", "Muons_eta", "Muons_phi", "Muons_q",
     "Segments_truthLink", "Segments_hitGeoIds", "Segments_localSegPars",
 ]
 #: The hits of the event. `localPos` is already in the frame of the spectrometer
@@ -47,13 +47,13 @@ TRUTH_BRANCHES = [
 #: no tracking geometry are needed anywhere in this file.
 SP_BRANCHES = [
     "event_id",
-    "spacePoint_geometryId", "spacePoint_bucketId",
+    "spacePoint_geometryId", "spacePoint_bucketId", "spacePoint_muonId",
     "spacePoint_localPosX", "spacePoint_localPosY", "spacePoint_localPosZ",
     "spacePoint_driftRadius", "spacePoint_covLoc0",
 ]
 PATTERN_BRANCHES = [
     "event_id",
-    "pattern_theta", "pattern_phi", "pattern_nPhiLayers",
+    "pattern_theta", "pattern_phi", "pattern_nPhiLayers", "pattern_sector",
     "pattern_meanNormResidual2",
     "hit_patternIdx", "hit_geometryId", "hit_station", "hit_muonId",
     "hit_bucketId", "hit_indexInBucket",
@@ -182,6 +182,15 @@ def main() -> int:
                                 for a in "XYZ"], axis=1).astype(float)
         sp_drift = ak.to_numpy(sp_event["spacePoint_driftRadius"]).astype(float)
         sp_variance = ak.to_numpy(sp_event["spacePoint_covLoc0"]).astype(float)
+        # the category and the station of every hit of the event, needed for
+        # the counts taken over a whole bucket rather than over a pattern
+        sp_decoded = gpfval.decode_muon_id(
+            ak.to_numpy(sp_event["spacePoint_muonId"]))
+        sp_category = gpfval.hit_categories(sp_decoded)
+        sp_station = gpfval.station_index(sp_decoded["stationName"])
+        row_of_geo = {}
+        for row, geo_id in enumerate(sp_geo):
+            row_of_geo.setdefault(int(geo_id), row)
         available = {int(g) for g in sp_geo}
         hits_in_bucket = np.bincount(
             sp_bucket, minlength=(int(sp_bucket.max()) + 1) if len(sp_bucket) else 1)
@@ -201,13 +210,25 @@ def main() -> int:
                        for geo_id in ids}
 
         for muon in range(len(truth_event["Muons_pt"])):
+            # the hits the muon left, as the rows of the event that its truth
+            # segments claim: the gen_N*Meas branches count these
+            mine = np.array([row_of_geo[g] for g in sorted(
+                per_muon.get(muon, set()) & available)], dtype=int)
+            on_muon = np.zeros(len(sp_geo), dtype=bool)
+            on_muon[mine] = True
             muon_rows.append({
                 "event": event, "muon": muon,
                 "pt": float(truth_event["Muons_pt"][muon]),
                 "eta": float(truth_event["Muons_eta"][muon]),
                 "phi": float(truth_event["Muons_phi"][muon]),
+                "q": int(truth_event["Muons_q"][muon]),
                 # only the surfaces that produced a hit could ever be found
                 "findable": len(per_muon.get(muon, set()) & available),
+                **{f"gen{name}": gpfval.per_station(
+                       on_muon & sp_category[key], sp_station).tolist()
+                   for key, name in (("prec", "PrecMeas"),
+                                     ("nonPrec", "NonPrecMeas"),
+                                     ("phi", "PhiMeas"))},
             })
 
         # --- the patterns ----------------------------------------------------
@@ -216,8 +237,11 @@ def main() -> int:
         hit_station = ak.to_numpy(patterns["hit_station"][entry]).astype(int)
         hit_bucket = ak.to_numpy(patterns["hit_bucketId"][entry]).astype(int)
         hit_index = ak.to_numpy(patterns["hit_indexInBucket"][entry]).astype(int)
-        hit_straw = (gpfval.decode_muon_id(ak.to_numpy(patterns["hit_muonId"][entry]))
-                     ["technology"] == gpfval.MDT)
+        hit_decoded = gpfval.decode_muon_id(
+            ak.to_numpy(patterns["hit_muonId"][entry]))
+        hit_straw = hit_decoded["technology"] == gpfval.MDT
+        hit_category = gpfval.hit_categories(hit_decoded)
+        hit_side = hit_decoded["side"]
 
         # a segment's chamber, read off the pattern hits whose identifiers it
         # claims; `Segments_chamberIdx` is in the shifted set and is not used
@@ -241,10 +265,47 @@ def main() -> int:
             found, counts = np.unique(owners[owners >= 0], return_counts=True)
             main = int(found[np.argmax(counts)]) if len(found) else -1
             is_main = owners == main if main >= 0 else np.zeros(len(owners), bool)
+            # the same flag over all hits of the event, so it can be combined
+            # with the category masks, which are not compressed to the pattern
+            is_main_all = np.zeros(len(hit_pattern), dtype=bool)
+            is_main_all[np.flatnonzero(mine)] = is_main
 
             buckets = np.unique(hit_bucket[mine])
+            # every hit of every bucket the pattern drew from, split the same
+            # way: the denominator the pat_NAll*Meas branches carry
+            in_buckets = np.isin(sp_bucket, buckets)
+            # the muons sharing at least one hit, most-shared first, which is the
+            # order pat_truthMatched is read in: getTruthPar takes element [0]
+            ranked = sorted(
+                ((int(np.count_nonzero(owners == m)), int(m)) for m in found),
+                reverse=True) if len(found) else []
+            stations_present = sorted(set(stations.tolist()))
             pattern_rows.append({
                 "event": event, "pattern": pattern, "mainMuon": main,
+                "matchedMuons": [m for _, m in ranked],
+                "nStations": len(stations_present),
+                "sector": int(patterns["pattern_sector"][entry][pattern]),
+                # the side of the first hit of the first station, as Athena's
+                # tester reads it off the sector of that hit
+                "side": int(hit_side[mine][
+                    np.argmax(stations == stations_present[0])])
+                        if len(stations_present) else 0,
+                **{f"n{name}": gpfval.per_station(
+                       mine & hit_category[key], hit_station).tolist()
+                   for key, name in (("prec", "PrecMeas"),
+                                     ("nonPrec", "NonPrecMeas"),
+                                     ("phi", "PhiMeas"))},
+                **{f"nTruth{name}": gpfval.per_station(
+                       mine & is_main_all & hit_category[key],
+                       hit_station).tolist()
+                   for key, name in (("prec", "PrecMeas"),
+                                     ("nonPrec", "NonPrecMeas"),
+                                     ("phi", "PhiMeas"))},
+                **{f"nAll{name}": gpfval.per_station(
+                       in_buckets & sp_category[key], sp_station).tolist()
+                   for key, name in (("prec", "PrecMeas"),
+                                     ("nonPrec", "NonPrecMeas"),
+                                     ("phi", "PhiMeas"))},
                 # distinct identifiers, the unit the truth side counts in
                 "shared": len({int(g) for g, m in zip(geo_ids, is_main) if m}),
                 "stationsWithMuon": len(set(stations[is_main].tolist())),

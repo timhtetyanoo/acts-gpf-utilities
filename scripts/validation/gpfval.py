@@ -14,13 +14,34 @@ import numpy as np
 # MuonSpacePoint::MuonId::MuonId(std::uint32_t) in
 # Examples/Framework/src/EventData/MuonSpacePoint.cpp.
 
-#: Technology field, MuonSpacePoint::MuonId::TechField
-#: Only the tube technology is needed: a straw's residual has its drift
-#: radius subtracted, everything else is measured where it was recorded
+#: Technology field, MuonSpacePoint::MuonId::TechField. The gap at 1 is the CSC,
+#: which Run 4 does not have
 MDT = 0
+RPC = 2
+TGC = 3
+STGC = 4
+MM = 5
 
 #: Stations in the order of Muon::MuonStationIndex::StIndex
 STATIONS = ["BI", "BM", "BO", "BE", "EI", "EM", "EO", "EE"]
+
+#: Number of stations, Muon::MuonStationIndex::StIndex::StIndexMax
+N_STATIONS = len(STATIONS)
+
+#: Sectors of the spectrometer, MuonStationIndex::numberOfSectors()
+N_SECTORS = 16
+
+#: Muon::MuonStationIndex::toStationIndex(ChIndex), as a lookup over the
+#: stationName field, which the exporter fills with the chamber index
+STATION_OF_CHAMBER = np.array([0, 0,      # BIS BIL -> BI
+                               1, 1,      # BMS BML -> BM
+                               2, 2,      # BOS BOL -> BO
+                               3,         # BEE     -> BE
+                               4, 4,      # EIS EIL -> EI
+                               5, 5,      # EMS EML -> EM
+                               6, 6,      # EOS EOL -> EO
+                               7, 7],     # EES EEL -> EE
+                              dtype=np.int8)
 
 
 def decode_muon_id(raw):
@@ -81,3 +102,71 @@ def direction(phi_degrees, theta_degrees):
     return np.stack([np.sin(theta) * np.cos(phi),
                      np.sin(theta) * np.sin(phi),
                      np.cos(theta)], axis=-1)
+
+
+def station_index(station_name):
+    """Station of a chamber, the counterpart of MuonStationIndex::toStationIndex.
+
+    The pattern file already records this quantity per hit as `hit_station`; the
+    space points of the n-tuple carry the chamber in their identifier instead,
+    so the counts taken over a whole bucket need the conversion.
+    """
+    name = np.asarray(station_name, dtype=int)
+    return STATION_OF_CHAMBER[np.clip(name, 0, len(STATION_OF_CHAMBER) - 1)]
+
+
+def hit_categories(decoded):
+    """Split hits into the three populations MuonFastRecoTester counts per station.
+
+    Precision is isPrecisionHit() from MuonSpacePoint/SpacePointHelpers: a tube
+    or a micromega, or an sTgc strip. A strip is the only sTgc measuring the
+    precision coordinate alone, which is how it is told apart from a pad without
+    the channel type the export does not carry.
+    """
+    tech = decoded["technology"]
+    measures_eta = decoded["measuresEta"]
+    precision = ((tech == MDT) | (tech == MM)
+                 | ((tech == STGC) & measures_eta & ~decoded["measuresPhi"]))
+    return {"prec": precision,
+            "nonPrec": measures_eta & ~precision,
+            "phi": ~measures_eta}
+
+
+def per_station(mask, stations):
+    """Count the hits selected by `mask`, one entry per station.
+
+    The inner vector of every pat_N*Meas and gen_N*Meas branch, which is indexed
+    by StIndex over its full range whether a station was crossed or not.
+
+    Counted in a wide type on purpose. The branches are UChar_t, but a bucket at
+    high occupancy holds more than 255 hits in one station, so the narrowing is
+    left to the writer, which saturates and says how often it had to.
+    """
+    counts = np.zeros(N_STATIONS, dtype=np.int32)
+    if len(stations) == 0:
+        return counts
+    selected = np.asarray(stations, dtype=int)[np.asarray(mask, dtype=bool)]
+    if len(selected):
+        np.add.at(counts, selected, 1)
+    return counts
+
+
+def expanded_sector_pair(expanded):
+    """The two ms sectors an expanded sector spans, as pat_Sector1 & pat_Sector2.
+
+    A transcription of ExpandedSector::msSectorAndProj, ::msSector and
+    ::adjacentMsSector. The two are equal when the pattern sits in the centre of
+    a sector rather than in an overlap, which is what isSectorOverlap() tests.
+    """
+    expanded = int(expanded)
+    if expanded in (0, 1):
+        # the wrap of sector 16, which the constructor maps onto 0 and 1
+        main, projector = N_SECTORS, expanded
+    else:
+        main = expanded // 2
+        projector = expanded - 2 * main
+    if main == 1 and projector == -1:
+        return main, N_SECTORS
+    if main == N_SECTORS and projector == 1:
+        return main, 1
+    return main, main + projector

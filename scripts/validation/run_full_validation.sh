@@ -75,7 +75,19 @@ for sample in "${samples[@]}"; do
   done
 done
 
-# --- 3. the metrics ---------------------------------------------------------
+# --- 3. the n-tuple for MuonFastRecoValidation ------------------------------
+# Read by the FastRecoValidation executable of houghidipuffvalidation, branch
+# LeonardoDev, which has to be built inside an Athena release. Copy the file
+# there if this machine has none.
+for sample in "${samples[@]}"; do
+  for implementation in "${implementations[@]}"; do
+    tag="${sample}_${implementation}"
+    "${python}" "${script_dir}/to_fastreco_tuple.py" \
+      "${out_dir}/tables_${tag}" "${out_dir}/MuonFastRecoTest_${tag}.root"
+  done
+done
+
+# --- 4. the metrics ---------------------------------------------------------
 rm -f -- "${scores}"
 for sample in "${samples[@]}"; do
   for implementation in "${implementations[@]}"; do
@@ -88,7 +100,7 @@ for sample in "${samples[@]}"; do
   done
 done
 
-# --- 4. the figures, one set per sample with the implementations overlaid ---
+# --- 5. the figures, one set per sample with the implementations overlaid ---
 for sample in "${samples[@]}"; do
   tables=()
   labels=()
@@ -101,7 +113,7 @@ for sample in "${samples[@]}"; do
     --output-dir "${plot_dir}/${sample}"
 done
 
-# --- 5. the exact comparison, once there is a second implementation --------
+# --- 6. the exact comparison, once there is a second implementation --------
 # Graded agreement is in the figures of stage 4; this is the binary gate, so a
 # difference is reported and does not stop the chain.
 if (( ${#implementations[@]} > 1 )); then
@@ -117,7 +129,7 @@ if (( ${#implementations[@]} > 1 )); then
   done
 fi
 
-# --- 6. warn about tracked files too large to push -------------------------
+# --- 7. warn about tracked files too large to push -------------------------
 # GitHub rejects files above 100 MB.
 if git -C "${repo_root}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   while IFS= read -r -d '' f; do
