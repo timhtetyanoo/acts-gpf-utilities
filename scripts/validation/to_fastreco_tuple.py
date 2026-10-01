@@ -1,18 +1,30 @@
-"""Write the validation tables as a MuonFastRecoTest tree.
+#!/usr/bin/env python3
+"""Write the validation tables out in the n-tuple format of MuonFastRecoValidation.
 
-Branch layout: MuonFastRecoValidTuple.h, houghidipuffvalidation, branch
-LeonardoDev. Counts only; the matching thresholds are applied on the reading
-side by MuonFastRecoValidTupleHelpers.
+The plotting package at gitlab.cern.ch/atlas-muon-software/houghidipuffvalidation
+reads a tree called `MuonFastRecoTest` whose branches are declared in
+MuonFastRecoValidTuple.h on the `LeonardoDev` branch. That tree is what Athena's
+MuonFastRecoTester writes, so producing it here lets the same executables plot
+the patterns the ACTS example found, with no change to either repository.
 
-Not filled:
+Only counts are written. Every threshold stays on the reading side, in
+MuonFastRecoValidTupleHelpers: `pat_truthMatched` lists every muon sharing a hit,
+most-shared first, and their `effQuality` decides what counts as found. The
+numbers of compute_metrics.py are therefore not reproduced but compared against.
 
-    pat_NPileup*                   no space point to truth particle link in the
-                                   export, so a pileup hit cannot be separated
-                                   from an unassociated one
-    runNumber, lbNumber, bcid      absent from the export
-    mcChannelNumber, mcEventWeight absent from the export
+Three groups of branches cannot be filled from the export and are written as
+zeros, which leaves the plots that use them empty and breaks nothing:
 
-Transverse momentum is converted from GeV to MeV.
+    pat_NPileup*    needs the xAOD::MuonSimHit behind a measurement, which
+                    decides pileup in MuonFastRecoTester::isTruthMatched. The
+                    export carries no link from a space point to a truth
+                    particle, so a pileup muon's hit cannot be told from cavern
+                    background or from a hit whose segment was not reconstructed
+    runNumber,      not in the export. Read only in a debug printout,
+    lbNumber,       FastRecoValidation.cxx:566
+    bcid
+    mcChannelNumber not in the export, unused by the plots
+    mcEventWeight
 """
 
 from __future__ import annotations
@@ -21,20 +33,20 @@ import argparse
 import sys
 from pathlib import Path
 
-import awkward as ak
 import numpy as np
 import pandas as pd
-import uproot
 
 import gpfval
 
 #: The tree MuonFastRecoValidTupleHelpers::intree names
 TREE = "MuonFastRecoTest"
 
-#: The export stores the transverse momentum in GeV, the tuple in MeV
+#: The export stores the transverse momentum in GeV, the tuple in MeV: its
+#: selections read `gen_Pt() * 1.e-3` and compare against a threshold in GeV
 PT_TO_MEV = 1.0e3
 
-#: Widest value a UChar_t branch holds
+#: Widest value a UChar_t branch holds. Athena's own writer uses
+#: MatrixBranch<unsigned char> for these, so it wraps where this saturates
 UCHAR_MAX = 255
 
 #: table column -> branch name, for the three populations counted per station
@@ -57,7 +69,7 @@ GEN_COUNTS = {
 
 
 class Saturation:
-    """Counts the values that did not fit a UChar_t branch."""
+    """Counts how much had to be thrown away to fit the branches' UChar_t."""
 
     def __init__(self):
         self.clipped = 0
@@ -76,14 +88,17 @@ class Saturation:
         return out
 
 
-def jagged(values, dtype):
-    """A branch of one vector per event, from a list of per-event sequences."""
-    return ak.values_astype(ak.Array([list(v) for v in values]), dtype)
-
-
 def build(muons: pd.DataFrame, patterns: pd.DataFrame, saturation: Saturation):
-    """Group the two tables by event and return the branches of the tree."""
-    # events without a pattern carry the muons that were missed
+    """Group the two tables by event and return python-native branch columns.
+
+    Returns lists (and numpy scalars) that map onto the TTree branches Athena
+    declares: `vector<T>` and `vector<vector<UChar_t>>`. uproot cannot write the
+    doubly nested ones as a classic TTree (only as RNTuple), which
+    NtupleAnalysisUtils cannot read, so the write step uses PyROOT instead.
+    """
+    # every event of the pattern file takes part, including the ones where no
+    # pattern was found: those events hold truth muons that were missed, which
+    # is the denominator of the efficiency
     events = sorted(set(muons["event"]) | set(patterns["event"]))
     by_muon = {event: frame for event, frame in muons.groupby("event")}
     by_pattern = {event: frame for event, frame in patterns.groupby("event")}
@@ -102,54 +117,136 @@ def build(muons: pd.DataFrame, patterns: pd.DataFrame, saturation: Saturation):
         m = by_muon.get(event, empty_muons)
         p = by_pattern.get(event, empty_patterns)
 
-        gen["gen_Pt"].append((m["pt"] * PT_TO_MEV).tolist())
-        gen["gen_Eta"].append(m["eta"].tolist())
-        gen["gen_Phi"].append(m["phi"].tolist())
-        gen["gen_Q"].append(m["q"].tolist())
+        gen["gen_Pt"].append((m["pt"] * PT_TO_MEV).astype(np.float32).tolist())
+        gen["gen_Eta"].append(m["eta"].astype(np.float32).tolist())
+        gen["gen_Phi"].append(m["phi"].astype(np.float32).tolist())
+        gen["gen_Q"].append(m["q"].astype(np.int16).tolist())
         for branch, column in GEN_COUNTS.items():
             gen_counts[branch].append(list(m[column]))
 
         sectors = [gpfval.expanded_sector_pair(s) for s in p["sector"]]
-        pat["pat_Eta"].append(p["eta"].tolist())
-        pat["pat_Phi"].append(p["phi"].tolist())
-        pat["pat_meanNormResidual2"].append(p["meanNormResidual2"].tolist())
-        pat["pat_NStations"].append(p["nStations"].tolist())
-        pat["pat_Sector1"].append([main for main, _ in sectors])
-        pat["pat_Sector2"].append([adjacent for _, adjacent in sectors])
-        pat["pat_Side"].append(p["side"].tolist())
-        pat["pat_truthMatched"].append([list(v) for v in p["matchedMuons"]])
+        pat["pat_Eta"].append(p["eta"].astype(np.float32).tolist())
+        pat["pat_Phi"].append(p["phi"].astype(np.float32).tolist())
+        pat["pat_meanNormResidual2"].append(
+            p["meanNormResidual2"].astype(np.float32).tolist())
+        pat["pat_NStations"].append(p["nStations"].astype(np.uint8).tolist())
+        pat["pat_Sector1"].append([int(main) for main, _ in sectors])
+        pat["pat_Sector2"].append([int(adjacent) for _, adjacent in sectors])
+        pat["pat_Side"].append(p["side"].astype(np.int16).tolist())
+        pat["pat_truthMatched"].append(
+            [[int(x) for x in v] for v in p["matchedMuons"]])
         for branch, column in COUNTS.items():
             pat_counts[branch].append(list(p[column]))
         n_patterns.append(len(p))
 
     branches = {
-        "eventNumber": np.asarray(events, dtype=np.uint64),
-        "pat_nPatterns": np.asarray(n_patterns, dtype=np.uint32),
-        "gen_Pt": jagged(gen["gen_Pt"], np.float32),
-        "gen_Eta": jagged(gen["gen_Eta"], np.float32),
-        "gen_Phi": jagged(gen["gen_Phi"], np.float32),
-        "gen_Q": jagged(gen["gen_Q"], np.int16),
-        "pat_Eta": jagged(pat["pat_Eta"], np.float32),
-        "pat_Phi": jagged(pat["pat_Phi"], np.float32),
-        "pat_meanNormResidual2": jagged(pat["pat_meanNormResidual2"], np.float32),
-        "pat_NStations": jagged(pat["pat_NStations"], np.uint8),
-        "pat_Sector1": jagged(pat["pat_Sector1"], np.uint16),
-        "pat_Sector2": jagged(pat["pat_Sector2"], np.uint16),
-        "pat_Side": jagged(pat["pat_Side"], np.int16),
-        "pat_truthMatched": jagged(pat["pat_truthMatched"], np.uint8),
+        "eventNumber": [int(e) for e in events],
+        "pat_nPatterns": [int(n) for n in n_patterns],
+        **gen,
+        **pat,
     }
     for branch, rows in {**gen_counts, **pat_counts}.items():
-        branches[branch] = jagged(saturation.narrow(rows), np.uint8)
+        branches[branch] = saturation.narrow(rows)
+    # nothing in the export distinguishes a pileup muon's hit, see the module
+    # doc string; the zeros keep isFromPileupMuon() false and the plots empty
     for branch in ("pat_NPileupPrecMeas", "pat_NPileupNonPrecMeas",
                    "pat_NPileupPhiMeas"):
-        branches[branch] = jagged(
-            [[[0] * gpfval.N_STATIONS] * n for n in n_patterns], np.uint8)
+        branches[branch] = [[[0] * gpfval.N_STATIONS] * n for n in n_patterns]
+    # absent from the export, written so the branches exist
     n_events = len(events)
-    for branch, dtype in (("runNumber", np.uint32), ("lbNumber", np.uint32),
-                          ("bcid", np.uint32), ("mcChannelNumber", np.uint32)):
-        branches[branch] = np.zeros(n_events, dtype=dtype)
-    branches["mcEventWeight"] = np.ones(n_events, dtype=np.float64)
+    for branch in ("runNumber", "lbNumber", "bcid", "mcChannelNumber"):
+        branches[branch] = [0] * n_events
+    branches["mcEventWeight"] = [1.0] * n_events
     return branches
+
+
+def write_ttree(path: Path, branches: dict) -> None:
+    """Write a classic TTree with vector / vector<vector> branches via PyROOT."""
+    import ROOT  # local: LCG / Athena env provides it
+
+    def fill_vector(vec, values):
+        vec.clear()
+        for value in values:
+            vec.push_back(value)
+
+    def fill_matrix(mat, rows):
+        mat.clear()
+        for row in rows:
+            inner = ROOT.std.vector["unsigned char"]()
+            for value in row:
+                inner.push_back(int(value))
+            mat.push_back(inner)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    file = ROOT.TFile.Open(str(path), "RECREATE")
+    if not file or file.IsZombie():
+        raise RuntimeError(f"Cannot create {path}")
+    tree = ROOT.TTree(TREE, TREE)
+
+    scalars = {
+        "eventNumber": np.array([0], dtype=np.uint64),
+        "pat_nPatterns": np.array([0], dtype=np.uint32),
+        "runNumber": np.array([0], dtype=np.uint32),
+        "lbNumber": np.array([0], dtype=np.uint32),
+        "bcid": np.array([0], dtype=np.uint32),
+        "mcChannelNumber": np.array([0], dtype=np.uint32),
+        "mcEventWeight": np.array([0.0], dtype=np.float64),
+    }
+    tree.Branch("eventNumber", scalars["eventNumber"], "eventNumber/l")
+    tree.Branch("pat_nPatterns", scalars["pat_nPatterns"], "pat_nPatterns/i")
+    tree.Branch("runNumber", scalars["runNumber"], "runNumber/i")
+    tree.Branch("lbNumber", scalars["lbNumber"], "lbNumber/i")
+    tree.Branch("bcid", scalars["bcid"], "bcid/i")
+    tree.Branch("mcChannelNumber", scalars["mcChannelNumber"], "mcChannelNumber/i")
+    tree.Branch("mcEventWeight", scalars["mcEventWeight"], "mcEventWeight/D")
+
+    vectors = {
+        "gen_Pt": ROOT.std.vector["float"](),
+        "gen_Eta": ROOT.std.vector["float"](),
+        "gen_Phi": ROOT.std.vector["float"](),
+        "gen_Q": ROOT.std.vector["short"](),
+        "pat_Eta": ROOT.std.vector["float"](),
+        "pat_Phi": ROOT.std.vector["float"](),
+        "pat_meanNormResidual2": ROOT.std.vector["float"](),
+        "pat_NStations": ROOT.std.vector["unsigned char"](),
+        "pat_Sector1": ROOT.std.vector["unsigned short"](),
+        "pat_Sector2": ROOT.std.vector["unsigned short"](),
+        "pat_Side": ROOT.std.vector["short"](),
+    }
+    for name, vec in vectors.items():
+        tree.Branch(name, vec)
+
+    matrices = {
+        name: ROOT.std.vector[ROOT.std.vector["unsigned char"]]()
+        for name in (
+            *GEN_COUNTS,
+            *COUNTS,
+            "pat_truthMatched",
+            "pat_NPileupPrecMeas",
+            "pat_NPileupNonPrecMeas",
+            "pat_NPileupPhiMeas",
+        )
+    }
+    for name, mat in matrices.items():
+        tree.Branch(name, mat)
+
+    n_events = len(branches["eventNumber"])
+    for i in range(n_events):
+        scalars["eventNumber"][0] = branches["eventNumber"][i]
+        scalars["pat_nPatterns"][0] = branches["pat_nPatterns"][i]
+        scalars["runNumber"][0] = branches["runNumber"][i]
+        scalars["lbNumber"][0] = branches["lbNumber"][i]
+        scalars["bcid"][0] = branches["bcid"][i]
+        scalars["mcChannelNumber"][0] = branches["mcChannelNumber"][i]
+        scalars["mcEventWeight"][0] = branches["mcEventWeight"][i]
+        for name, vec in vectors.items():
+            fill_vector(vec, branches[name][i])
+        for name, mat in matrices.items():
+            fill_matrix(mat, branches[name][i])
+        tree.Fill()
+
+    tree.Write()
+    file.Close()
 
 
 def main() -> int:
@@ -164,18 +261,16 @@ def main() -> int:
 
     saturation = Saturation()
     branches = build(muons, patterns, saturation)
+    write_ttree(args.output, branches)
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with uproot.recreate(args.output) as file:
-        file[TREE] = branches
-
+    print(f"Wrote {len(branches['eventNumber'])} events, "
+          f"{sum(branches['pat_nPatterns'])} patterns and "
+          f"{len(muons)} truth muons to {args.output}:{TREE}")
     if saturation.clipped:
-        print(f"warning: {saturation.clipped} station counts saturated at "
-              f"{UCHAR_MAX}, maximum {saturation.largest}", file=sys.stderr)
-    print(f"{args.output}:{TREE}  "
-          f"{len(branches['eventNumber'])} events, "
-          f"{int(branches['pat_nPatterns'].sum())} patterns, "
-          f"{len(muons)} truth muons")
+        print(f"Saturated {saturation.clipped} station counts at {UCHAR_MAX}, "
+              f"the largest was {saturation.largest}. The branches are UChar_t "
+              f"and a bucket holds more hits than that; Athena's own writer "
+              f"wraps here instead.")
     return 0
 
 
