@@ -44,25 +44,28 @@ def main() -> int:
         raise SystemExit("Nothing to plot")
 
     # the median over the repetitions, and the spread as the uncertainty on it
-    grouped = data.groupby(["sample", "component"])["time_perevent_s"]
+    if "implementation" not in data.columns:
+        data["implementation"] = ""
+    data["series"] = (data["implementation"] + " " + data["component"]).str.strip()
+    grouped = data.groupby(["sample", "series"])["time_perevent_s"]
     summary = grouped.agg(["median", "std", "size"]).reset_index()
     summary["std"] = summary["std"].fillna(0.0)
 
     samples = sorted(summary["sample"].unique())
-    components = sorted(summary["component"].unique())
-    width = 0.8 / max(len(components), 1)
+    series = sorted(summary["series"].unique())
+    width = 0.8 / max(len(series), 1)
 
     fig, ax = plt.subplots(figsize=(1.8 + 1.6 * len(samples), 3.6))
-    for i, component in enumerate(components):
-        rows = summary[summary["component"] == component].set_index("sample")
+    for i, name in enumerate(series):
+        rows = summary[summary["series"] == name].set_index("sample")
         centres = np.arange(len(samples)) + i * width
         values = [rows["median"].get(s, np.nan) * 1e3 for s in samples]
         errors = [rows["std"].get(s, 0.0) * 1e3 for s in samples]
         ax.bar(centres, values, width=width, yerr=errors, capsize=3,
-               label=component)
+               label=name)
 
     repetitions = int(data.groupby(
-        ["sample", "component"]).size().max()) if len(data) else 0
+        ["sample", "series"]).size().max()) if len(data) else 0
     ax.set_xticks(np.arange(len(samples)) + 0.4 - width / 2)
     ax.set_xticklabels(samples)
     ax.set_ylabel("time per event [ms]")

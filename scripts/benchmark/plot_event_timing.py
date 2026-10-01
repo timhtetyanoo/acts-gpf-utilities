@@ -38,15 +38,15 @@ def main() -> int:
     data = data[~data["isFirst"]]
     if data.empty:
         raise SystemExit("Nothing to plot")
-    data["execute_ms"] = data["execute_us"] / 1e3
+    data["totalTime_ms"] = data["totalTime_us"] / 1e3
 
     fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.4))
     for label, run in data.groupby(["sample", "implementation"]):
         name = " ".join(label)
-        axes[0].plot(run["nSpacePoints"], run["execute_ms"], ".", ms=2,
+        axes[0].plot(run["nSpacePoints"], run["totalTime_ms"], ".", ms=2,
                      alpha=0.5, label=name)
-        axes[1].hist(run["execute_ms"], bins=40, histtype="step", lw=1.3,
-                     label=f"{name}: median {run['execute_ms'].median():.2f} ms")
+        axes[1].hist(run["totalTime_ms"], bins=40, histtype="step", lw=1.3,
+                     label=f"{name}: median {run['totalTime_ms'].median():.2f} ms")
 
     axes[0].set_xlabel("space points in the event")
     axes[0].set_ylabel("time per event [ms]")

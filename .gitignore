@@ -20,6 +20,13 @@ __pycache__/
 !gpf_validation/*.csv
 !gpf_validation/*.log
 
+# summary artifacts of a timing run
+!gpf_timing/**/*.csv
+!gpf_timing/**/*.png
+!gpf_compare/**/*.csv
+!gpf_compare/**/*.png
+!gpf_compare/**/*.log
+
 # large & regenerable outputs of a validation run
 gpf_validation/tables_*/
 

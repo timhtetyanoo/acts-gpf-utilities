@@ -17,14 +17,23 @@ pattern finder again.
 
 ```text
 scripts/
+  gpf_common.sh                        shared driver / n-tuple helpers
   validation/
-    run_full_validation.sh             the whole chain, every stage skippable
-    run_global_pattern_validation.sh   run the finder over the configured samples
+    run_full_validation.sh             physics chain, every stage skippable
+    run_global_pattern_validation.sh   run the finder, write pattern files
     gpfval.py                          definitions transcribed from ACTS & Athena
     build_validation_tables.py         patterns + truth -> the validation tables
     compute_metrics.py                 the tables -> efficiency, fakes, residuals
     make_plots.py                      the four figures
-    compare_patterns.py                two runs, hit by hit (cpu against cuda)
+    compare_patterns.py                two pattern files, hit by hit
+  compare/
+    run_compare.sh                     compare existing validation & timing outputs
+  benchmark/
+    run_timing_benchmark.sh            timing only: no patterns, quiet logs
+    aggregate_event_timing.py          C++ per-event csv -> summary
+    plot_event_timing.py               cost vs occupancy
+    collect_timing.py                  Sequencer csv -> one table
+    plot_timing.py                     Sequencer component bars
 docs/
   acts_changes.md                      what this work changed in the ACTS checkout
 ```
@@ -59,22 +68,53 @@ data/ActsTrackingGeometry.json
 
 `GPF_DATA_DIR` points the scripts elsewhere.
 
-## The whole chain
+## Two pipelines
+
+`GPF_DRIVER` is the runner (`cpp` or `python`, default `cpp`).
+`GPF_IMPLEMENTATIONS` is the algorithm (`cpu` now, later `cpu cuda`). They are
+independent: a CUDA build is still timed with `GPF_DRIVER=cpp` unless you
+explicitly want the Sequencer total.
+
+### Validation (physics only)
 
 ```bash
-export ACTS_BUILD_DIR=/path/to/acts/build   # omit to analyse existing pattern files
-
 scripts/validation/run_full_validation.sh
 ```
 
-Stages whose output exists are skipped; `GPF_FORCE=1` redoes them. Stage 1 needs
-the build machine, stages 2 to 5 run anywhere.
+Writes patterns, tables, the FastReco tuple, `scores.csv` and the physics
+plots into `gpf_validation/`. It does not time anything. `GPF_FORCE=1` redoes
+stages whose output already exists. Stage 1 needs the build; the later stages
+run anywhere. `ACTS_BUILD_DIR=` (empty) skips the finder and analyses files
+that are already there.
 
-Everything is written into `gpf_validation/` of this repository. The pattern
-files, `scores.csv`, the logs and the figures are tracked, so a run is
-transferred with a commit and a push; the tables are large and regenerable and
-are ignored. The last stage warns about any tracked
-output above 50 MB, since GitHub refuses files above 100 MB.
+```bash
+GPF_DRIVER=python scripts/validation/run_full_validation.sh
+```
+
+### Performance (timing only)
+
+```bash
+scripts/benchmark/run_timing_benchmark.sh
+```
+
+No pattern file, WARNING logging, finder stdout kept off the terminal. Default
+is the C++ data test: one row per event, 500 events, 3 repetitions, then
+`event_timings.csv` / `event_summary.csv` / `plots/event_timing.png` under
+`gpf_timing/cpp/`. Use `GPF_DRIVER=python` for the Sequencer's per-component
+total, which lands in `gpf_timing/python/`. A GPU comparison is a later step:
+run each implementation, then `scripts/compare/run_compare.sh`.
+
+Defaults shared by both: PG0, 500 events, `../acts/build`.
+
+### Comparison (after the fact)
+
+```bash
+GPF_IMPLEMENTATIONS="cpu cuda" scripts/compare/run_compare.sh
+```
+
+Reads `gpf_validation/` and `gpf_timing/{cpp,python}/`, writes overlays and
+the hit-by-hit gate into `gpf_compare/`. Does not run the finder. The first
+name is the reference. Either half can be missing.
 
 ### 1. The patterns
 
@@ -84,8 +124,8 @@ scripts/validation/run_global_pattern_validation.sh
 
 Each case writes `patterns_<sample>_<implementation>.root` and a log into
 `${GPF_OUT_DIR}` (by default `gpf_validation/` of this repository). Overrides:
-`GPF_SAMPLES`, `GPF_IMPLEMENTATIONS`, `GPF_MAX_EVENTS`, `GPF_GEOMETRY`,
-`GPF_OUT_DIR`, `GPF_<SAMPLE>_NTUPLE` and `GPF_FORCE`.
+`GPF_DRIVER`, `GPF_SAMPLES`, `GPF_IMPLEMENTATIONS`, `GPF_MAX_EVENTS`,
+`GPF_GEOMETRY`, `GPF_OUT_DIR`, `GPF_<SAMPLE>_NTUPLE` and `GPF_FORCE`.
 
 ### 2. The validation tables
 
@@ -255,7 +295,6 @@ which the pattern does not estimate.
 
 ## Planned
 
-- timing campaign and the corresponding plots;
 - energy measurements, once the CUDA version exists.
 
 ## Reproducibility

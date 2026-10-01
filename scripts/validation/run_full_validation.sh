@@ -5,19 +5,22 @@
 # already there, so a rerun only does the work that is missing.
 #
 # The first stage needs the ACTS build and therefore the build machine; all the
-# later ones only read the pattern files and the n-tuple and run anywhere. Leave
-# ACTS_BUILD_DIR unset to analyse pattern files that were produced elsewhere.
+# later ones only read the pattern files and the n-tuple and run anywhere. Set
+# ACTS_BUILD_DIR= (empty) to analyse pattern files that were produced elsewhere.
 #
 # Everything is written into <this repo>/gpf_validation. What is small enough to
 # push is tracked; the tables are ignored by .gitignore.
 #
 # Optional:
-#   ACTS_BUILD_DIR   build directory; unset skips the pattern finding
+#   ACTS_BUILD_DIR   build directory (default: <this repo>/../acts/build).
+#                    Set to empty to skip pattern finding and reuse existing files.
+#   GPF_DRIVER       cpp | python, forwarded to the finder  (default: cpp)
 #   GPF_DATA_DIR     n-tuples & tracking geometry      (default: <this repo>/data)
 #   GPF_OUT_DIR      output directory                  (default: <this repo>/gpf_validation)
 #   GPF_SCORES       csv the metrics are collected in  (default: ${GPF_OUT_DIR}/scores.csv)
 #   GPF_PLOT_DIR     directory of the figures          (default: ${GPF_OUT_DIR}/plots)
-#   GPF_SAMPLES      samples to process                (default: "PG0 PG200")
+#   GPF_SAMPLES      samples to process                (default: "PG0")
+#   GPF_MAX_EVENTS   events for pattern finding        (default: 500)
 #   GPF_IMPLEMENTATIONS                                (default: "cpu")
 #   GPF_MATCHING_RATIO    ACTS's matchingRatio         (default: 0.5)
 #   GPF_MIN_STATIONS      chambers a match needs       (default: 2)
@@ -32,11 +35,16 @@ out_dir="${GPF_OUT_DIR:-${repo_root}/gpf_validation}"
 scores="${GPF_SCORES:-${out_dir}/scores.csv}"
 plot_dir="${GPF_PLOT_DIR:-${out_dir}/plots}"
 geometry="${GPF_GEOMETRY:-${data_dir}/ActsTrackingGeometry.json}"
+if [[ ! -v ACTS_BUILD_DIR ]]; then
+  ACTS_BUILD_DIR="$(cd -- "${repo_root}/../acts/build" && pwd)"
+fi
+export ACTS_BUILD_DIR
+export GPF_MAX_EVENTS="${GPF_MAX_EVENTS:-500}"
 
 python="${PYTHON:-${repo_root}/.venv/bin/python}"
 command -v "${python}" >/dev/null 2>&1 || python="python3"
 
-read -r -a samples <<<"${GPF_SAMPLES:-PG0 PG200}"
+read -r -a samples <<<"${GPF_SAMPLES:-PG0}"
 read -r -a implementations <<<"${GPF_IMPLEMENTATIONS:-cpu}"
 
 ntuple_for() {
@@ -87,15 +95,6 @@ for sample in "${samples[@]}"; do
   done
 done
 
-# --- the timing of the pattern finding, written by the data test -----------
-if compgen -G "${out_dir}/runs/timing_*.csv" >/dev/null; then
-  "${python}" "${script_dir}/../benchmark/aggregate_event_timing.py" \
-    "${out_dir}/runs" --output-dir "${out_dir}" \
-    | tee -- "${out_dir}/logs/timing.log"
-  "${python}" "${script_dir}/../benchmark/plot_event_timing.py" \
-    "${out_dir}/event_timings.csv" --output "${plot_dir}/event_timing.png"
-fi
-
 # --- 4. the metrics ---------------------------------------------------------
 rm -f -- "${scores}"
 for sample in "${samples[@]}"; do
@@ -109,36 +108,17 @@ for sample in "${samples[@]}"; do
   done
 done
 
-# --- 5. the figures, one set per sample with the implementations overlaid ---
+# --- 5. the figures, one set per sample and implementation -----------------
 for sample in "${samples[@]}"; do
-  tables=()
-  labels=()
   for implementation in "${implementations[@]}"; do
-    tables+=("${out_dir}/tables_${sample}_${implementation}")
-    labels+=("${implementation}")
+    "${python}" "${script_dir}/make_plots.py" \
+      "${out_dir}/tables_${sample}_${implementation}" \
+      --labels "${implementation}" --sample "${sample}" \
+      --output-dir "${plot_dir}/${sample}/${implementation}"
   done
-  "${python}" "${script_dir}/make_plots.py" "${tables[@]}" \
-    --labels "${labels[@]}" --sample "${sample}" \
-    --output-dir "${plot_dir}/${sample}"
 done
 
-# --- 6. the exact comparison, once there is a second implementation --------
-# Graded agreement is in the figures of stage 4; this is the binary gate, so a
-# difference is reported and does not stop the chain.
-if (( ${#implementations[@]} > 1 )); then
-  reference="${implementations[0]}"
-  for implementation in "${implementations[@]:1}"; do
-    for sample in "${samples[@]}"; do
-      echo "Comparing ${sample}: ${implementation} against ${reference}"
-      "${python}" "${script_dir}/compare_patterns.py" \
-        "${out_dir}/patterns_${sample}_${reference}.root" \
-        "${out_dir}/patterns_${sample}_${implementation}.root" \
-        | tee -- "${out_dir}/logs/compare_${sample}_${implementation}.log" || true
-    done
-  done
-fi
-
-# --- 7. warn about tracked files too large to push -------------------------
+# --- 6. warn about tracked files too large to push -------------------------
 # GitHub rejects files above 100 MB.
 if git -C "${repo_root}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   while IFS= read -r -d '' f; do

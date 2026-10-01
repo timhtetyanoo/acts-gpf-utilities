@@ -1,33 +1,31 @@
 #!/usr/bin/env bash
 #
-# Runs the muon global pattern finder over the configured samples and keeps the
-# resulting pattern files for the offline validation. Finished cases are skipped,
-# so the script can be re-run after adding a sample or an implementation.
+# Runs the muon global pattern finder over the configured samples and writes
+# the pattern files for the offline validation. Finished cases are skipped, so
+# the script can be re-run after adding a sample or an implementation.
 #
-# Runs bin/ActsUnitTestGlobalPatternFinderData, which loops over the events by
-# hand and needs nothing but the build.
+# GPF_DRIVER selects the runner (default cpp):
+#   cpp     bin/ActsUnitTestGlobalPatternFinderData
+#   python  Examples/Scripts/Python/muon_global_pattern_finder.py (Sequencer)
 #
-# Examples/Scripts/Python/muon_global_pattern_finder.py runs the same algorithm
-# through the Sequencer and is the way to get its per algorithm timing, but it
-# is deliberately not a driver here. The two would report timing in different
-# shapes, the Sequencer's being one aggregate row per component, so the output
-# of this chain would depend on which of them had run. Run it by hand instead,
-# and compare_patterns.py checks that it still finds the same patterns.
-#
-# Required:
-#   ACTS_BUILD_DIR        build directory holding bin/
+# GPF_IMPLEMENTATIONS is which algorithm is run (cpu now, later cpu cuda), not
+# which runner. Timing belongs in scripts/benchmark/, not here.
 #
 # Optional:
-#   GPF_TAG_SUFFIX        appended to the file names, so that two runs of the
-#                         same sample can be kept side by side and compared
-#   GPF_DATA_DIR          n-tuples & tracking geometry     (default: <this repo>/data)
-#   GPF_OUT_DIR           output directory                 (default: <this repo>/gpf_validation)
-#   GPF_GEOMETRY          tracking geometry json           (default: ${GPF_DATA_DIR}/ActsTrackingGeometry.json)
-#   GPF_SAMPLES           samples to process               (default: "PG0 PG200")
-#   GPF_IMPLEMENTATIONS   implementations to run           (default: "cpu")
-#   GPF_MAX_EVENTS        events per case                  (default: all)
-#   GPF_<SAMPLE>_NTUPLE   n-tuple of that sample           (default: ${GPF_DATA_DIR}/ParticleGun_MU<pile-up>.root)
-#   GPF_FORCE             set to 1 to rerun finished cases
+#   ACTS_BUILD_DIR        build directory
+#                         (default: <this repo>/../acts/build)
+#   ACTS_SOURCE_DIR       ACTS source, python driver only
+#                         (default: <this repo>/../acts)
+#   GPF_DRIVER            cpp | python                 (default: cpp)
+#   GPF_TAG_SUFFIX        appended to the file names
+#   GPF_DATA_DIR          n-tuples & tracking geometry (default: <this repo>/data)
+#   GPF_OUT_DIR           output directory             (default: <this repo>/gpf_validation)
+#   GPF_GEOMETRY          tracking geometry json
+#   GPF_SAMPLES           samples                      (default: "PG0")
+#   GPF_IMPLEMENTATIONS   algorithms                   (default: "cpu")
+#   GPF_MAX_EVENTS        events per case              (default: 500)
+#   GPF_<SAMPLE>_NTUPLE   n-tuple of that sample
+#   GPF_FORCE             1 to rerun finished cases
 #
 # @note Development tooling for the local validation of the example. It is not
 #       meant to be part of an upstream pull request.
@@ -36,38 +34,44 @@ set -Eeuo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/../.." && pwd)"
-build_dir="${ACTS_BUILD_DIR:?ACTS_BUILD_DIR is not set}"
+# shellcheck source=../gpf_common.sh
+source "${script_dir}/../gpf_common.sh"
+
+driver="$(gpf_driver)"
+source_dir="$(cd -- "${ACTS_SOURCE_DIR:-${repo_root}/../acts}" && pwd)"
+build_dir="$(cd -- "${ACTS_BUILD_DIR:-${source_dir}/build}" && pwd)"
 data_dir="${GPF_DATA_DIR:-${repo_root}/data}"
 out_dir="${GPF_OUT_DIR:-${repo_root}/gpf_validation}"
 geometry="${GPF_GEOMETRY:-${data_dir}/ActsTrackingGeometry.json}"
 executable="${build_dir}/bin/ActsUnitTestGlobalPatternFinderData"
+finder_script="${source_dir}/Examples/Scripts/Python/muon_global_pattern_finder.py"
+finder_python="${GPF_PYTHON:-python3}"
+max_events="${GPF_MAX_EVENTS:-500}"
+export ACTS_SEQUENCER_DISABLE_FPEMON="${ACTS_SEQUENCER_DISABLE_FPEMON:-1}"
 
-read -r -a samples <<<"${GPF_SAMPLES:-PG0 PG200}"
+read -r -a samples <<<"${GPF_SAMPLES:-PG0}"
 read -r -a implementations <<<"${GPF_IMPLEMENTATIONS:-cpu}"
 
-if [[ ! -x "${executable}" ]]; then
+if [[ "${driver}" == "cpp" && ! -x "${executable}" ]]; then
   echo "Executable not found: ${executable}" >&2
   exit 1
+fi
+if [[ "${driver}" == "python" ]]; then
+  if [[ ! -f "${finder_script}" ]]; then
+    echo "Run script not found: ${finder_script}" >&2
+    exit 1
+  fi
+  if [[ ! -d "${build_dir}/python" ]]; then
+    echo "No python bindings in ${build_dir}; configure ACTS with them" >&2
+    exit 1
+  fi
 fi
 if [[ ! -f "${geometry}" ]]; then
   echo "Tracking geometry not found: ${geometry}" >&2
   exit 1
 fi
 
-mkdir -p -- "${out_dir}/logs" "${out_dir}/runs"
-
-# @brief Returns the n-tuple of the sample, honouring a GPF_<SAMPLE>_NTUPLE override
-ntuple_for() {
-  local sample="$1"
-  local override="GPF_${sample}_NTUPLE"
-  local fallback
-  case "${sample}" in
-    PG0) fallback="${data_dir}/ParticleGun_MU0.root" ;;
-    PG200) fallback="${data_dir}/ParticleGun_MU200.root" ;;
-    *) fallback="${data_dir}/${sample}.root" ;;
-  esac
-  printf '%s' "${!override:-${fallback}}"
-}
+mkdir -p -- "${out_dir}/logs"
 
 # @brief Runs one sample with one implementation
 run_case() {
@@ -83,15 +87,27 @@ run_case() {
     return
   fi
 
-  echo "Running ${tag}"
-  ACTS_GPF_NTUPLE="${ntuple}" \
-  ACTS_GPF_GEOMETRY="${geometry}" \
-  ACTS_GPF_OUTPUT="${output}" \
-  ACTS_GPF_MAX_EVENTS="${GPF_MAX_EVENTS:-}" \
-  ACTS_GPF_TIMING="${out_dir}/runs/timing_${tag}.csv" \
-  ACTS_GPF_IMPLEMENTATION="${implementation}" \
-    "${executable}" --log_level=message --report_level=no --color_output=no \
-    2>&1 | tee -- "${log}"
+  echo "Running ${tag} (${driver})"
+  if [[ "${driver}" == "cpp" ]]; then
+    ACTS_GPF_NTUPLE="${ntuple}" \
+    ACTS_GPF_GEOMETRY="${geometry}" \
+    ACTS_GPF_OUTPUT="${output}" \
+    ACTS_GPF_MAX_EVENTS="${max_events}" \
+    ACTS_GPF_LOG_LEVEL="${GPF_LOG_LEVEL:-INFO}" \
+    ACTS_GPF_IMPLEMENTATION="${implementation}" \
+      "${executable}" --log_level=message --report_level=no --color_output=no \
+      >"${log}" 2>&1
+  else
+    PYTHONPATH="${build_dir}/python:${PYTHONPATH:-}" \
+      "${finder_python}" "${finder_script}" \
+        --input "${ntuple}" \
+        --geometry "${geometry}" \
+        --output "${output}" \
+        --nEvents "${max_events}" \
+        --threads 1 \
+        --logLevel "${GPF_LOG_LEVEL:-INFO}" \
+      >"${log}" 2>&1
+  fi
 
   if [[ ! -f "${output}" ]]; then
     echo "No pattern file was written for ${tag}, see ${log}" >&2
@@ -100,7 +116,7 @@ run_case() {
 }
 
 for sample in "${samples[@]}"; do
-  ntuple="$(ntuple_for "${sample}")"
+  ntuple="$(gpf_ntuple_for "${data_dir}" "${sample}")"
   if [[ ! -f "${ntuple}" ]]; then
     echo "Missing n-tuple for ${sample}: ${ntuple}" >&2
     exit 1

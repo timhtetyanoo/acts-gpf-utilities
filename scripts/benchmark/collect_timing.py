@@ -9,7 +9,7 @@ so the conditions of the run are not in the file, only in its name. This reads
 every file of a directory, recovers the conditions from the name, and writes one
 tidy table:
 
-    sample, events, threads, repetition, component, time_total_s, time_perevent_s
+    sample, events, threads, repetition, implementation, component, time_total_s, time_perevent_s
 
 The ACTS benchmarking scripts pull the number they want out of the timing file
 with `grep` and `awk`. The file is a csv, so it is parsed as one here instead:
@@ -25,9 +25,10 @@ import re
 import sys
 from pathlib import Path
 
-#: timing_<sample>_e<events>_t<threads>_r<repetition>.csv
-NAME = re.compile(r"^timing_(?P<sample>.+)_e(?P<events>\d+)"
-                  r"_t(?P<threads>\d+)_r(?P<repetition>\d+)\.csv$")
+#: timing_<sample>_<implementation>_e<events>_t<threads>_r<repetition>.csv
+NAME = re.compile(
+    r"^timing_(?P<sample>.+)_(?P<implementation>[^_]+)_e(?P<events>\d+)"
+    r"_t(?P<threads>\d+)_r(?P<repetition>\d+)\.csv$")
 
 
 def rows_of(path: Path) -> list[dict]:
@@ -37,6 +38,7 @@ def rows_of(path: Path) -> list[dict]:
         return []
     conditions = {
         "sample": match["sample"],
+        "implementation": match["implementation"],
         "events": int(match["events"]),
         "threads": int(match["threads"]),
         "repetition": int(match["repetition"]),

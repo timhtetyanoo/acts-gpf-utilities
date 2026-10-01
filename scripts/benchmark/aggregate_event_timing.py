@@ -3,7 +3,7 @@
 
 The test times each call of the pattern finder on its own and writes
 
-    event,nSpacePoints,nBuckets,nPatterns,execute_us
+    event,nSpacePoints,nBuckets,nPatterns,totalTime_us
 
 so the cost is available as a distribution rather than as a total. That is what
 the Sequencer cannot give: it reports one number per component for the whole
@@ -68,11 +68,11 @@ def main() -> int:
     grouped = warm.groupby(["sample", "implementation", "suffix"])
     summary = grouped.apply(lambda g: pd.Series({
         "events": len(g),
-        "median_us": g["execute_us"].median(),
-        "p90_us": g["execute_us"].quantile(0.9),
-        "max_us": g["execute_us"].max(),
+        "median_us": g["totalTime_us"].median(),
+        "p90_us": g["totalTime_us"].quantile(0.9),
+        "max_us": g["totalTime_us"].max(),
         "median_spacepoints": g["nSpacePoints"].median(),
-        "us_per_spacepoint": (g["execute_us"] / g["nSpacePoints"]).median()
+        "us_per_spacepoint": (g["totalTime_us"] / g["nSpacePoints"]).median()
         if (g["nSpacePoints"] > 0).all() else float("nan"),
         "median_patterns": g["nPatterns"].median(),
     }), include_groups=False).reset_index()
