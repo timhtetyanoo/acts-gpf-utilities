@@ -54,7 +54,7 @@ if [[ ! -f "${geometry}" ]]; then
   exit 1
 fi
 
-mkdir -p -- "${out_dir}/logs"
+mkdir -p -- "${out_dir}/logs" "${out_dir}/runs"
 
 # @brief Returns the n-tuple of the sample, honouring a GPF_<SAMPLE>_NTUPLE override
 ntuple_for() {
@@ -88,6 +88,7 @@ run_case() {
   ACTS_GPF_GEOMETRY="${geometry}" \
   ACTS_GPF_OUTPUT="${output}" \
   ACTS_GPF_MAX_EVENTS="${GPF_MAX_EVENTS:-}" \
+  ACTS_GPF_TIMING="${out_dir}/runs/timing_${tag}.csv" \
   ACTS_GPF_IMPLEMENTATION="${implementation}" \
     "${executable}" --log_level=message --report_level=no --color_output=no \
     2>&1 | tee -- "${log}"

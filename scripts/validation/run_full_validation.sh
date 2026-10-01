@@ -87,6 +87,15 @@ for sample in "${samples[@]}"; do
   done
 done
 
+# --- the timing of the pattern finding, written by the data test -----------
+if compgen -G "${out_dir}/runs/timing_*.csv" >/dev/null; then
+  "${python}" "${script_dir}/../benchmark/aggregate_event_timing.py" \
+    "${out_dir}/runs" --output-dir "${out_dir}" \
+    | tee -- "${out_dir}/logs/timing.log"
+  "${python}" "${script_dir}/../benchmark/plot_event_timing.py" \
+    "${out_dir}/event_timings.csv" --output "${plot_dir}/event_timing.png"
+fi
+
 # --- 4. the metrics ---------------------------------------------------------
 rm -f -- "${scores}"
 for sample in "${samples[@]}"; do
