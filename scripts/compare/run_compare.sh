@@ -1,130 +1,144 @@
 #!/usr/bin/env bash
 #
-# Compares results that the validation and performance pipelines already wrote.
-# It does not run the finder. Missing halves are skipped: you can compare
-# physics only, timing only, or both.
+# Compares two sets of results that already exist. It runs no finder and
+# aggregates nothing: it reads what the validation and performance pipelines
+# wrote and puts the two sides next to each other.
 #
-# The first name in GPF_IMPLEMENTATIONS is the reference, the rest are compared
-# against it.
+# The four directories are taken as given. How they were produced, on which
+# machine and by which driver makes no difference here, and the labels come
+# from the command line rather than from the file names.
 #
-# Optional:
-#   GPF_VALIDATION_DIR     physics outputs      (default: <this repo>/gpf_validation)
-#   GPF_TIMING_DIR         parent of cpp/python (default: <this repo>/gpf_timing)
-#   GPF_TIMING_CPP_DIR     C++ timings          (default: ${GPF_TIMING_DIR}/cpp)
-#   GPF_TIMING_PYTHON_DIR  Sequencer timings    (default: ${GPF_TIMING_DIR}/python)
-#   GPF_OUT_DIR            comparison outputs   (default: <this repo>/gpf_compare)
-#   GPF_SAMPLES         samples             (default: "PG0")
-#   GPF_IMPLEMENTATIONS reference first     (default: "cpu cuda")
-#   PYTHON              interpreter         (default: <this repo>/.venv/bin/python)
+#   --reference-validation DIR   physics of the reference
+#   --compare-validation   DIR   physics of the other side
+#   --reference-timing     DIR   timing of the reference, holding event_summary.csv
+#   --compare-timing       DIR   timing of the other side
+#   --reference-label NAME       default: reference
+#   --compare-label   NAME       default: compared
+#   --samples "PG0 PG200"        default: PG0
+#   --output DIR                 default: <this repo>/gpf_compare
+#
+# Each pair is optional: give the validation pair for a physics comparison, the
+# timing pair for a speedup, or both.
 
 set -Eeuo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/../.." && pwd)"
-validation_dir="${GPF_VALIDATION_DIR:-${repo_root}/gpf_validation}"
-timing_root="${GPF_TIMING_DIR:-${repo_root}/gpf_timing}"
-timing_cpp="${GPF_TIMING_CPP_DIR:-${timing_root}/cpp}"
-timing_python="${GPF_TIMING_PYTHON_DIR:-${timing_root}/python}"
-out_dir="${GPF_OUT_DIR:-${repo_root}/gpf_compare}"
 python="${PYTHON:-${repo_root}/.venv/bin/python}"
 command -v "${python}" >/dev/null 2>&1 || python="python3"
 
-read -r -a samples <<<"${GPF_SAMPLES:-PG0}"
-read -r -a implementations <<<"${GPF_IMPLEMENTATIONS:-cpu cuda}"
+reference_validation=""
+compare_validation=""
+reference_timing=""
+compare_timing=""
+reference_label="reference"
+compare_label="compared"
+samples_raw="PG0"
+out_dir="${repo_root}/gpf_compare"
 
-if (( ${#implementations[@]} < 2 )); then
-  echo "GPF_IMPLEMENTATIONS needs a reference and at least one other, e.g. \"cpu cuda\"" >&2
-  exit 1
-fi
+usage() { sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
 
-reference="${implementations[0]}"
-mkdir -p -- "${out_dir}/physics/logs" "${out_dir}/physics/plots"
+while (($#)); do
+  case "$1" in
+    --reference-validation) reference_validation="${2:?}"; shift ;;
+    --compare-validation)   compare_validation="${2:?}";   shift ;;
+    --reference-timing)     reference_timing="${2:?}";     shift ;;
+    --compare-timing)       compare_timing="${2:?}";       shift ;;
+    --reference-label)      reference_label="${2:?}";      shift ;;
+    --compare-label)        compare_label="${2:?}";        shift ;;
+    --samples)              samples_raw="${2:?}";          shift ;;
+    --output)               out_dir="${2:?}";              shift ;;
+    --help|-h)              usage ;;
+    *) echo "Unknown argument: $1" >&2; usage ;;
+  esac
+  shift
+done
+
+read -r -a samples <<<"${samples_raw}"
 did_anything=0
 
-# --- physics: hit-by-hit patterns, overlaid figures --------------------------
-if [[ -d "${validation_dir}" ]]; then
-  for sample in "${samples[@]}"; do
-    ref_patterns="${validation_dir}/patterns_${sample}_${reference}.root"
-    if [[ ! -f "${ref_patterns}" ]]; then
-      echo "No validation patterns for ${sample} ${reference}, skipping physics"
-      continue
-    fi
-    physics=0
-    for implementation in "${implementations[@]:1}"; do
-      cmp_patterns="${validation_dir}/patterns_${sample}_${implementation}.root"
-      if [[ ! -f "${cmp_patterns}" ]]; then
-        echo "No validation patterns for ${sample} ${implementation}, skipping"
-        continue
-      fi
-      echo "Patterns ${sample}: ${implementation} against ${reference}"
-      "${python}" "${script_dir}/../validation/compare_patterns.py" \
-        "${ref_patterns}" "${cmp_patterns}" \
-        | tee -- "${out_dir}/physics/logs/compare_${sample}_${implementation}.log" || true
-      physics=1
-    done
+# @brief Prints the single path matching a glob inside a directory
+#        Several matches are an error: which of them is meant is a guess
+only_match() {
+  local directory="$1" pattern="$2" found=()
+  shopt -s nullglob
+  found=("${directory}"/${pattern})
+  shopt -u nullglob
+  if ((${#found[@]} == 0)); then
+    return 1
+  fi
+  if ((${#found[@]} > 1)); then
+    echo "Several ${pattern} in ${directory}, cannot tell which is meant" >&2
+    return 1
+  fi
+  printf '%s' "${found[0]}"
+}
 
-    tables=()
-    labels=()
-    for implementation in "${implementations[@]}"; do
-      dir="${validation_dir}/tables_${sample}_${implementation}"
-      if [[ -f "${dir}/muon_flags.parquet" ]]; then
-        tables+=("${dir}")
-        labels+=("${implementation}")
-      fi
-    done
-    if (( ${#tables[@]} > 1 )); then
-      echo "Overlaying physics plots for ${sample}"
-      "${python}" "${script_dir}/../validation/make_plots.py" "${tables[@]}" \
-        --labels "${labels[@]}" --sample "${sample}" \
+# --- physics ----------------------------------------------------------------
+if [[ -n "${reference_validation}" && -n "${compare_validation}" ]]; then
+  mkdir -p -- "${out_dir}/physics/logs" "${out_dir}/physics/plots"
+  for sample in "${samples[@]}"; do
+    reference_patterns="$(only_match "${reference_validation}" "patterns_${sample}_*.root")" || {
+      echo "No patterns for ${sample} in ${reference_validation}, skipping"
+      continue
+    }
+    compare_patterns="$(only_match "${compare_validation}" "patterns_${sample}_*.root")" || {
+      echo "No patterns for ${sample} in ${compare_validation}, skipping"
+      continue
+    }
+
+    echo "Patterns ${sample}: ${compare_label} against ${reference_label}"
+    "${python}" "${script_dir}/../validation/compare_patterns.py" \
+      "${reference_patterns}" "${compare_patterns}" \
+      | tee -- "${out_dir}/physics/logs/patterns_${sample}.log" || true
+    did_anything=1
+
+    reference_tables="$(only_match "${reference_validation}" "tables_${sample}_*")" || true
+    compare_tables="$(only_match "${compare_validation}" "tables_${sample}_*")" || true
+    if [[ -f "${reference_tables:-/dev/null}/muon_flags.parquet"
+       && -f "${compare_tables:-/dev/null}/muon_flags.parquet" ]]; then
+      echo "Overlaying the figures of ${sample}"
+      "${python}" "${script_dir}/../validation/make_plots.py" \
+        "${reference_tables}" "${compare_tables}" \
+        --labels "${reference_label}" "${compare_label}" --sample "${sample}" \
         --output-dir "${out_dir}/physics/plots/${sample}"
-      physics=1
-    fi
-    if (( physics )); then
-      did_anything=1
     fi
   done
 
-  if [[ -f "${validation_dir}/scores.csv" ]]; then
-    cp -f -- "${validation_dir}/scores.csv" "${out_dir}/physics/scores.csv"
+  # the metrics of both sides in one table, each row carrying its label
+  reference_scores="${reference_validation}/scores.csv"
+  compare_scores="${compare_validation}/scores.csv"
+  if [[ -f "${reference_scores}" && -f "${compare_scores}" ]]; then
+    {
+      printf 'side,'; head -n 1 -- "${reference_scores}"
+      tail -n +2 -- "${reference_scores}" | sed "s/^/${reference_label},/"
+      tail -n +2 -- "${compare_scores}"   | sed "s/^/${compare_label},/"
+    } >"${out_dir}/physics/scores.csv"
+    echo "Metrics of both sides in ${out_dir}/physics/scores.csv"
     did_anything=1
   fi
 fi
 
-# --- timing: each driver has its own tree ------------------------------------
-collect_cpp="${timing_cpp}/repetitions"
-if [[ ! -d "${collect_cpp}" ]]; then
-  collect_cpp="${timing_cpp}/runs"
-fi
-if [[ -d "${collect_cpp}" ]] && compgen -G "${collect_cpp}/timing_*.csv" >/dev/null; then
-  echo "C++ event timings from ${collect_cpp}"
-  mkdir -p -- "${out_dir}/timing/cpp"
-  "${python}" "${script_dir}/../benchmark/aggregate_event_timing.py" \
-    "${collect_cpp}" --output-dir "${out_dir}/timing/cpp" \
-    | tee -- "${out_dir}/timing/cpp/collect.log"
-  "${python}" "${script_dir}/../benchmark/plot_event_timing.py" \
-    "${out_dir}/timing/cpp/event_timings.csv" \
-    --output "${out_dir}/timing/cpp/event_timing.png"
-  did_anything=1
-fi
-
-collect_python="${timing_python}/repetitions"
-if [[ ! -d "${collect_python}" ]]; then
-  collect_python="${timing_python}/runs"
-fi
-if [[ -d "${collect_python}" ]] && compgen -G "${collect_python}/timing_*.csv" >/dev/null; then
-  echo "Sequencer timings from ${collect_python}"
-  mkdir -p -- "${out_dir}/timing/python"
-  "${python}" "${script_dir}/../benchmark/collect_timing.py" \
-    "${collect_python}" --output "${out_dir}/timing/python/timings.csv" \
-    | tee -- "${out_dir}/timing/python/collect.log"
-  "${python}" "${script_dir}/../benchmark/plot_timing.py" \
-    "${out_dir}/timing/python/timings.csv" \
-    --output "${out_dir}/timing/python/timing.png"
-  did_anything=1
+# --- timing -----------------------------------------------------------------
+if [[ -n "${reference_timing}" && -n "${compare_timing}" ]]; then
+  reference_summary="${reference_timing}/event_summary.csv"
+  compare_summary="${compare_timing}/event_summary.csv"
+  if [[ -f "${reference_summary}" && -f "${compare_summary}" ]]; then
+    mkdir -p -- "${out_dir}/timing"
+    echo
+    "${python}" "${script_dir}/compare_timing.py" \
+      "${reference_summary}" "${compare_summary}" \
+      --reference-label "${reference_label}" --compare-label "${compare_label}" \
+      --output "${out_dir}/timing/speedup.csv" \
+      | tee -- "${out_dir}/timing/speedup.log"
+    did_anything=1
+  else
+    echo "Both timing directories need an event_summary.csv from the benchmark" >&2
+  fi
 fi
 
-if (( ! did_anything )); then
-  echo "Nothing to compare in ${validation_dir}, ${timing_cpp} or ${timing_python}" >&2
+if ((! did_anything)); then
+  echo "Nothing was compared; give a validation pair, a timing pair, or both" >&2
   exit 1
 fi
 

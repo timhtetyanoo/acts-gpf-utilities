@@ -1,18 +1,6 @@
 # Shared helpers for the validation and benchmark runners.
 # Source after `repo_root` is set.
 
-# @brief cpp (data test) or python (Sequencer). cpp is the default.
-gpf_driver() {
-  local driver="${GPF_DRIVER:-cpp}"
-  case "${driver}" in
-    cpp|python) printf '%s' "${driver}" ;;
-    *)
-      echo "GPF_DRIVER must be cpp or python, not ${driver}" >&2
-      return 1
-      ;;
-  esac
-}
-
 # @brief n-tuple of a sample, honouring GPF_<SAMPLE>_NTUPLE
 # @param $1 data directory
 # @param $2 sample name (PG0, PG200, ...)

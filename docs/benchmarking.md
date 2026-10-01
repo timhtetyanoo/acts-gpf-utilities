@@ -1,10 +1,48 @@
 # Measuring execution time
 
-Notes, not decisions. Nothing here is implemented yet. The purpose is the CUDA
-comparison: knowing which part of the pattern finding is worth moving to the GPU,
-and being able to state a speedup that somebody else could reproduce.
+How the timing is produced and what it means. The purpose is the CUDA
+comparison: a speedup that somebody else could reproduce.
 
-## What already exists
+## What is measured
+
+`bin/ActsUnitTestGlobalPatternFinderData` times each call of the pattern finder
+on its own and writes one row per event:
+
+```text
+event,nSpacePoints,nBuckets,nPatterns,totalTime_us
+```
+
+The reader and the writer are separate calls in the test loop, so the clocks
+cover the algorithm alone. `steady_clock` is monotonic, so a change of the
+system time leaves the durations intact.
+
+The hit counts share the row because they separate a busier event from a slower
+one: `us_per_spacepoint` is flat when the cost per unit of work is unchanged and
+the sample is merely denser.
+
+`aggregate_event_timing.py` summarises the runs, dropping the first event of
+each because it pays for cold caches, and quotes medians rather than means for
+the same reason. `scripts/compare/compare_timing.py` divides two summaries into
+a speedup.
+
+## When there is a GPU
+
+The phases go on the same row:
+
+```text
+totalTime_us, uploadTime_us, kernelTime_us, downloadTime_us
+```
+
+`totalTime_us` stays the end to end, which is below the sum of the phases by
+however much transfer and compute overlap. The aggregator summarises every
+column ending in `Time_us`, so the extra ones need no change to it.
+
+Transfer and kernel have to be timed with CUDA events rather than a host clock:
+a kernel launch returns before the work is done, so a wall clock around it times
+the launch. Recording the bytes moved alongside the time gives an effective
+bandwidth, which is what says whether a transfer is slow or merely large.
+
+## Precedents
 
 ### ACTS, per algorithm
 
@@ -27,11 +65,8 @@ identifier,time_total_s,time_perevent_s
 Written to `Sequencer::Config::outputTimingFile`, `timing.csv` by default, in
 `outputDir`. Wall clock, from `std::chrono::high_resolution_clock`.
 
-**The catch for us:** our run stage uses the C++ data test, not the `Sequencer`,
-so this is not available unless the chain moves to
-`Examples/Scripts/Python/muon_global_pattern_finder.py`. That entry point has to
-survive to the pull request anyway, since the data test is a development aid
-that will be removed, so switching is worth doing for its own sake.
+`Examples/Scripts/Python/muon_global_pattern_finder.py` runs the finder through
+the `Sequencer` and is where this view comes from, run by hand.
 
 ### ACTS, per call
 
@@ -94,48 +129,6 @@ PerfMonMT. `MuonFastReconstructionTesterConfig.py` already exposes it through it
 separate plotting script, in the sibling utilities repository. A dedicated
 benchmark executable rather than timing inside the reconstruction job.
 
-## What we could measure, and with what
-
-### The three stages, for free
-
-`GlobalPatternFinderAlgorithm::execute` already separates them:
-
-```cpp
-SearchTreeData treeData{constructTree(gctx, inSpacePoints)};   // 1 build the tree
-... m_globPatFinder->findPatterns(gctx, treeData.tree, ...)    // 2 find patterns
-MuonGlobalPatternContainer patterns{convertToPattern(...)};    // 3 convert
-```
-
-All three are callable, so `microBenchmark` reaches them without touching
-anything. This is the first measurement worth having: if building the search
-tree dominates, porting the seed loop to the GPU buys little, and that changes
-what the project is.
-
-### Inside the Core, not with microBenchmark
-
-`findPatternsInEta`, the seed loop, `getPhiOnlyHits` and `resolveOverlaps` are
-private members of the Core template and cannot be called from a benchmark. A
-breakdown there needs either a profiler or instrumentation in the Core.
-
-A sampling profiler needs no code change and attributes time inside the
-templates:
-
-```bash
-perf record -g ./bin/ActsUnitTestGlobalPatternFinderData && perf report
-```
-
-Timers inside the Core would give boundaries that match the port's structure
-rather than the compiler's function boundaries, but they mean changing the Core,
-which is a last resort. Only worth asking for once `perf` shows the function
-level view is too coarse.
-
-### Suggested order
-
-1. the three stages, to find out whether the Core is even the thing to optimise;
-2. `perf` inside whichever stage dominates;
-3. Core instrumentation only if 2 proves too coarse, with a concrete reason to
-   give lmonaco.
-
 ## Machine dependence
 
 Absolute times are not comparable between machines. They depend on the CPU model,
@@ -155,15 +148,3 @@ A median with an error, which `microBenchmark` gives and a single wall-clock
 measurement does not, is also worth having — it protects against one unlucky run
 being reported as a result.
 
-## Open
-
-- whether to move the run stage onto the `Sequencer` entry point, which would
-  give the per-algorithm csv for free;
-- whether the benchmark lives in a separate executable, as the Hough work did, or
-  inside the existing test, as `StrawLineFitterTest` does;
-- whether to report per-event time in a labelled histogram, following
-  `StrawLineFitterTest`, or a median with an error from `microBenchmark`. The
-  first is simpler and matches the repository; the second says how much of a
-  difference is noise;
-- what sample and event count a timing campaign should use, which only matters
-  once there is something to compare.

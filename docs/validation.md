@@ -520,3 +520,36 @@ are involved.
   relative to the identifiers that select the segment, and
   `Segments_localToGlobal` does not reproduce the position of the hits it should
   belong to either.
+
+---
+
+## Comparing two runs
+
+`compare_patterns.py` checks whether two runs found the same patterns. It pairs
+them by the hits they share and then reports the differences, so a pattern that
+lost one borderline hit stays one pattern rather than being counted as one
+missing and one appeared.
+
+A hit is named by its place in the input space point container, the bucket and
+the index within it. Neither the order of the hits in a pattern nor the order of
+the patterns in an event carries meaning, because both sides are compared as
+sets of those names.
+
+### The two runs have to read the same events
+
+That name is a **position in the input**, not a property of the hit. Two runs
+over the same n-tuple and the same event range name the same hit the same way.
+Two runs over different samples, or over different numbers of events, or over
+the same file read in a different order, do not: the same bucket and index then
+point at different hits.
+
+Nothing detects this. The comparison does not fail, it reports differences that
+are an artefact of the pairing rather than of the finder. So the precondition is
+on the runs, not on the tool:
+
+- the same n-tuple,
+- the same events, in the same order,
+- one thread, since the Sequencer finishes events out of order with more and
+  the entries of the pattern file are then no longer in event order.
+
+Everything else may differ: the machine, the build, the implementation.

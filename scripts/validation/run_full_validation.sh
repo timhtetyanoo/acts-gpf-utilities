@@ -14,14 +14,14 @@
 # Optional:
 #   ACTS_BUILD_DIR   build directory (default: <this repo>/../acts/build).
 #                    Set to empty to skip pattern finding and reuse existing files.
-#   GPF_DRIVER       cpp | python, forwarded to the finder  (default: cpp)
 #   GPF_DATA_DIR     n-tuples & tracking geometry      (default: <this repo>/data)
-#   GPF_OUT_DIR      output directory                  (default: <this repo>/gpf_validation)
+#   GPF_OUT_DIR      output directory
+#                    (default: <this repo>/gpf_validation/${GPF_IMPLEMENTATION})
 #   GPF_SCORES       csv the metrics are collected in  (default: ${GPF_OUT_DIR}/scores.csv)
 #   GPF_PLOT_DIR     directory of the figures          (default: ${GPF_OUT_DIR}/plots)
 #   GPF_SAMPLES      samples to process                (default: "PG0")
 #   GPF_MAX_EVENTS   events for pattern finding        (default: 500)
-#   GPF_IMPLEMENTATIONS                                (default: "cpu")
+#   GPF_IMPLEMENTATION    label of the algorithm      (default: cpu)
 #   GPF_MATCHING_RATIO    ACTS's matchingRatio         (default: 0.5)
 #   GPF_MIN_STATIONS      chambers a match needs       (default: 2)
 #   PYTHON           python interpreter                (default: <this repo>/.venv/bin/python)
@@ -31,7 +31,8 @@ set -Eeuo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/../.." && pwd)"
 data_dir="${GPF_DATA_DIR:-${repo_root}/data}"
-out_dir="${GPF_OUT_DIR:-${repo_root}/gpf_validation}"
+implementation="${GPF_IMPLEMENTATION:-cpu}"
+out_dir="${GPF_OUT_DIR:-${repo_root}/gpf_validation/${implementation}}"
 scores="${GPF_SCORES:-${out_dir}/scores.csv}"
 plot_dir="${GPF_PLOT_DIR:-${out_dir}/plots}"
 geometry="${GPF_GEOMETRY:-${data_dir}/ActsTrackingGeometry.json}"
@@ -45,7 +46,6 @@ python="${PYTHON:-${repo_root}/.venv/bin/python}"
 command -v "${python}" >/dev/null 2>&1 || python="python3"
 
 read -r -a samples <<<"${GPF_SAMPLES:-PG0}"
-read -r -a implementations <<<"${GPF_IMPLEMENTATIONS:-cpu}"
 
 ntuple_for() {
   local sample="$1"
@@ -71,16 +71,14 @@ fi
 
 # --- 2. the validation tables ----------------------------------------------
 for sample in "${samples[@]}"; do
-  for implementation in "${implementations[@]}"; do
-    tag="${sample}_${implementation}"
-    tables="${out_dir}/tables_${tag}"
-    if [[ -f "${tables}/patterns.parquet" && "${GPF_FORCE:-0}" != "1" ]]; then
-      echo "Tables already built, skipping: ${tag}"
-      continue
-    fi
-    "${python}" "${script_dir}/build_validation_tables.py" \
-      "${out_dir}/patterns_${tag}.root" "$(ntuple_for "${sample}")" "${tables}"
-  done
+  tag="${sample}_${implementation}"
+  tables="${out_dir}/tables_${tag}"
+  if [[ -f "${tables}/patterns.parquet" && "${GPF_FORCE:-0}" != "1" ]]; then
+    echo "Tables already built, skipping: ${tag}"
+    continue
+  fi
+  "${python}" "${script_dir}/build_validation_tables.py" \
+    "${out_dir}/patterns_${tag}.root" "$(ntuple_for "${sample}")" "${tables}"
 done
 
 # --- 3. the n-tuple for MuonFastRecoValidation ------------------------------
@@ -88,34 +86,28 @@ done
 # LeonardoDev, which has to be built inside an Athena release. Copy the file
 # there if this machine has none.
 for sample in "${samples[@]}"; do
-  for implementation in "${implementations[@]}"; do
-    tag="${sample}_${implementation}"
-    "${python}" "${script_dir}/to_fastreco_tuple.py" \
-      "${out_dir}/tables_${tag}" "${out_dir}/MuonFastRecoTest_${tag}.root"
-  done
+  tag="${sample}_${implementation}"
+  "${python}" "${script_dir}/to_fastreco_tuple.py" \
+    "${out_dir}/tables_${tag}" "${out_dir}/MuonFastRecoTest_${tag}.root"
 done
 
 # --- 4. the metrics ---------------------------------------------------------
 rm -f -- "${scores}"
 for sample in "${samples[@]}"; do
-  for implementation in "${implementations[@]}"; do
-    tag="${sample}_${implementation}"
-    "${python}" "${script_dir}/compute_metrics.py" "${out_dir}/tables_${tag}" \
-      --sample "${sample}" --implementation "${implementation}" \
-      --matching-ratio "${GPF_MATCHING_RATIO:-0.5}" \
-      --min-stations "${GPF_MIN_STATIONS:-2}" \
-      --scan --output "${scores}" | tee -- "${out_dir}/logs/metrics_${tag}.log"
-  done
+  tag="${sample}_${implementation}"
+  "${python}" "${script_dir}/compute_metrics.py" "${out_dir}/tables_${tag}" \
+    --sample "${sample}" --implementation "${implementation}" \
+    --matching-ratio "${GPF_MATCHING_RATIO:-0.5}" \
+    --min-stations "${GPF_MIN_STATIONS:-2}" \
+    --scan --output "${scores}" | tee -- "${out_dir}/logs/metrics_${tag}.log"
 done
 
-# --- 5. the figures, one set per sample and implementation -----------------
+# --- 5. the figures, one set per sample ------------------------------------
 for sample in "${samples[@]}"; do
-  for implementation in "${implementations[@]}"; do
-    "${python}" "${script_dir}/make_plots.py" \
-      "${out_dir}/tables_${sample}_${implementation}" \
-      --labels "${implementation}" --sample "${sample}" \
-      --output-dir "${plot_dir}/${sample}/${implementation}"
-  done
+  "${python}" "${script_dir}/make_plots.py" \
+    "${out_dir}/tables_${sample}_${implementation}" \
+    --labels "${implementation}" --sample "${sample}" \
+    --output-dir "${plot_dir}/${sample}/${implementation}"
 done
 
 # --- 6. warn about tracked files too large to push -------------------------

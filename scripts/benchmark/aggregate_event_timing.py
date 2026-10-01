@@ -64,18 +64,29 @@ def main() -> int:
         ["sample", "implementation", "suffix"])["event"].transform("min") \
         == events["event"]
 
+    # every column of times is summarised, so a run carrying the phases of a
+    # GPU beside the total is handled by the same code
+    phases = [c for c in events.columns if c.endswith("Time_us")]
+
+    def describe(group: pd.DataFrame) -> pd.Series:
+        out = {"events": len(group)}
+        for phase in phases:
+            name = phase.removesuffix("Time_us")
+            out[f"{name}_median_us"] = group[phase].median()
+            out[f"{name}_p90_us"] = group[phase].quantile(0.9)
+        out["median_us"] = group["totalTime_us"].median()
+        out["p90_us"] = group["totalTime_us"].quantile(0.9)
+        out["max_us"] = group["totalTime_us"].max()
+        out["median_spacepoints"] = group["nSpacePoints"].median()
+        out["us_per_spacepoint"] = (
+            (group["totalTime_us"] / group["nSpacePoints"]).median()
+            if (group["nSpacePoints"] > 0).all() else float("nan"))
+        out["median_patterns"] = group["nPatterns"].median()
+        return pd.Series(out)
+
     warm = events[~events["isFirst"]]
-    grouped = warm.groupby(["sample", "implementation", "suffix"])
-    summary = grouped.apply(lambda g: pd.Series({
-        "events": len(g),
-        "median_us": g["totalTime_us"].median(),
-        "p90_us": g["totalTime_us"].quantile(0.9),
-        "max_us": g["totalTime_us"].max(),
-        "median_spacepoints": g["nSpacePoints"].median(),
-        "us_per_spacepoint": (g["totalTime_us"] / g["nSpacePoints"]).median()
-        if (g["nSpacePoints"] > 0).all() else float("nan"),
-        "median_patterns": g["nPatterns"].median(),
-    }), include_groups=False).reset_index()
+    summary = warm.groupby(["sample", "implementation", "suffix"]).apply(
+        describe, include_groups=False).reset_index()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     events.to_csv(args.output_dir / "event_timings.csv", index=False)

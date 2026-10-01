@@ -17,7 +17,7 @@ pattern finder again.
 
 ```text
 scripts/
-  gpf_common.sh                        shared driver / n-tuple helpers
+  gpf_common.sh                        shared n-tuple helpers
   validation/
     run_full_validation.sh             physics chain, every stage skippable
     run_global_pattern_validation.sh   run the finder, write pattern files
@@ -28,12 +28,11 @@ scripts/
     compare_patterns.py                two pattern files, hit by hit
   compare/
     run_compare.sh                     compare existing validation & timing outputs
+    compare_timing.py                  two timing summaries -> speedup table
   benchmark/
     run_timing_benchmark.sh            timing only: no patterns, quiet logs
     aggregate_event_timing.py          C++ per-event csv -> summary
     plot_event_timing.py               cost vs occupancy
-    collect_timing.py                  Sequencer csv -> one table
-    plot_timing.py                     Sequencer component bars
 docs/
   acts_changes.md                      what this work changed in the ACTS checkout
 ```
@@ -70,10 +69,16 @@ data/ActsTrackingGeometry.json
 
 ## Two pipelines
 
-`GPF_DRIVER` is the runner (`cpp` or `python`, default `cpp`).
-`GPF_IMPLEMENTATIONS` is the algorithm (`cpu` now, later `cpu cuda`). They are
-independent: a CUDA build is still timed with `GPF_DRIVER=cpp` unless you
-explicitly want the Sequencer total.
+Both run `bin/ActsUnitTestGlobalPatternFinderData`. `GPF_IMPLEMENTATION`
+(`cpu` now, later `cuda`) names the output directory and goes into the file
+names, so a second implementation is a second run and the two sit side by side:
+
+```text
+gpf_validation/cpu/   gpf_validation/cuda/
+gpf_timing/cpu/       gpf_timing/cuda/
+```
+
+`scripts/compare/` then takes a pair of them.
 
 ### Validation (physics only)
 
@@ -82,14 +87,10 @@ scripts/validation/run_full_validation.sh
 ```
 
 Writes patterns, tables, the FastReco tuple, `scores.csv` and the physics
-plots into `gpf_validation/`. It does not time anything. `GPF_FORCE=1` redoes
+plots into `gpf_validation/<implementation>/`. It does not time anything. `GPF_FORCE=1` redoes
 stages whose output already exists. Stage 1 needs the build; the later stages
 run anywhere. `ACTS_BUILD_DIR=` (empty) skips the finder and analyses files
 that are already there.
-
-```bash
-GPF_DRIVER=python scripts/validation/run_full_validation.sh
-```
 
 ### Performance (timing only)
 
@@ -98,23 +99,33 @@ scripts/benchmark/run_timing_benchmark.sh
 ```
 
 No pattern file, WARNING logging, finder stdout kept off the terminal. Default
-is the C++ data test: one row per event, 500 events, 3 repetitions, then
-`event_timings.csv` / `event_summary.csv` / `plots/event_timing.png` under
-`gpf_timing/cpp/`. Use `GPF_DRIVER=python` for the Sequencer's per-component
-total, which lands in `gpf_timing/python/`. A GPU comparison is a later step:
-run each implementation, then `scripts/compare/run_compare.sh`.
+One row per event, 500 events, 3 repetitions, then `event_timings.csv`,
+`event_summary.csv` and `plots/event_timing.png` under
+`gpf_timing/<implementation>/`. A GPU
+comparison is a later step: run each implementation into its own directory,
+then `scripts/compare/run_compare.sh`.
+
+The Sequencer entry point of ACTS,
+`Examples/Scripts/Python/muon_global_pattern_finder.py`, reports a per
+component total for a whole run and is there to be run by hand when that view
+is wanted.
 
 Defaults shared by both: PG0, 500 events, `../acts/build`.
 
 ### Comparison (after the fact)
 
 ```bash
-GPF_IMPLEMENTATIONS="cpu cuda" scripts/compare/run_compare.sh
+scripts/compare/run_compare.sh \
+  --reference-validation gpf_validation/cpu --compare-validation gpf_validation/cuda \
+  --reference-timing     gpf_timing/cpu     --compare-timing     gpf_timing/cuda \
+  --reference-label cpu --compare-label cuda
 ```
 
-Reads `gpf_validation/` and `gpf_timing/{cpp,python}/`, writes overlays and
-the hit-by-hit gate into `gpf_compare/`. Does not run the finder. The first
-name is the reference. Either half can be missing.
+Takes the four directories as given: how they were produced and what the runs
+were called inside them makes no difference, and the labels come from the
+command line. Writes the hit-by-hit gate, the overlaid figures and the speedup
+table into `gpf_compare/`. Runs no finder. Each pair is optional, so physics
+only, timing only or both.
 
 ### 1. The patterns
 
@@ -123,8 +134,8 @@ scripts/validation/run_global_pattern_validation.sh
 ```
 
 Each case writes `patterns_<sample>_<implementation>.root` and a log into
-`${GPF_OUT_DIR}` (by default `gpf_validation/` of this repository). Overrides:
-`GPF_DRIVER`, `GPF_SAMPLES`, `GPF_IMPLEMENTATIONS`, `GPF_MAX_EVENTS`,
+`${GPF_OUT_DIR}` (by default `gpf_validation/<implementation>/`). Overrides:
+`GPF_SAMPLES`, `GPF_IMPLEMENTATION`, `GPF_MAX_EVENTS`,
 `GPF_GEOMETRY`, `GPF_OUT_DIR`, `GPF_<SAMPLE>_NTUPLE` and `GPF_FORCE`.
 
 ### 2. The validation tables
@@ -213,9 +224,8 @@ parquet for plotting.
 The exit code is non-zero when the agreement falls below `--min-matched`,
 `--min-jaccard` or `--tolerance`. The defaults demand exact agreement, which is
 what a pure reordering of the same arithmetic gives; loosen them deliberately
-once the CUDA version is known to differ, rather than ignoring a red exit. The
-driver runs the comparison by itself as soon as `GPF_IMPLEMENTATIONS` names more
-than one implementation, taking the first as the reference.
+once the CUDA version is known to differ, rather than ignoring a red exit.
+`scripts/compare/run_compare.sh` runs it over two validation directories.
 
 It answers a different question from stage 5. This one asks how far the two runs
 drifted apart, hit by hit; the overlaid figures ask whether a run that drifted is
