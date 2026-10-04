@@ -2,6 +2,24 @@
 .DS_Store
 __pycache__/
 
-# every result of a run, and the inputs, far too large to track
-/results/
+# the inputs, far too large to track
 /data/
+
+# results/: everything is ignored except the small files that summarise a run,
+# so that they can be pushed next to the code. The patterns, the tables, the
+# tuples, the raw timings and the logs stay local.
+/results/**
+!/results/**/
+!/results/**/run_info.txt
+!/results/**/validation/scores.csv
+!/results/**/validation/metrics.log
+!/results/**/validation/plots/*.png
+!/results/**/timing/summary.csv
+!/results/**/timing/event_timing.png
+!/results/**/hough/**/*.pdf
+# a comparison of two runs
+!/results/compare/**/patterns.log
+!/results/compare/**/scores.csv
+!/results/compare/**/speedup.csv
+!/results/compare/**/speedup.log
+!/results/compare/**/plots/*.png

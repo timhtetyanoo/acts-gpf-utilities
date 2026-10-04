@@ -1,0 +1,4 @@
+run,repetition,events,mean time (us),median time (us),p90 time (us),max time (us),median space points,median time per space point (us),empty events,median patterns
+cpu_pg0_all,r01,50999.0,24492.900919625874,528.0,1468.0,605707345.0,85.0,6.206033959975743,7.0,2.0
+cpu_pg0_all,r02,50999.0,24521.848448008783,529.0,1471.0,606988997.0,85.0,6.214285714285714,7.0,2.0
+cpu_pg0_all,r03,50999.0,24533.850722563187,530.0,1477.0,608094523.0,85.0,6.219512195121951,7.0,2.0

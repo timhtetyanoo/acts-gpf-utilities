@@ -30,12 +30,13 @@ scripts/
     compute_metrics.py                 the tables -> efficiency, fakes, residuals
     make_plots.py                      the four figures
     to_fastreco_tuple.py               tables -> MuonFastRecoValidation n-tuple
+    run_hough_plots.sh                 STEP 3, optional: the plotting package's figures
     compare_patterns.py                two pattern files, hit by hit
   compare/
     run_compare.sh                     compare two runs and two validations
     compare_timing.py                  two timing summaries -> speedup table
 configs/                               one config per run: its name, sample and build
-results/                               everything the scripts write, ignored by git
+results/                               everything the scripts write; only the small summaries are tracked
 docs/
   acts_changes.md                      what this work changed in the ACTS checkout
 ```
@@ -102,9 +103,23 @@ scripts/validation/run_validation.sh --name cpu_pg0_quick
 A config is plain bash assignments. The flags and the variable each one sets are
 listed in `scripts/gpf_common.sh`, and `--help` prints the header of a script.
 
-`results/` is ignored by git as a whole, so nothing a run writes is ever
-tracked. `run_info.txt` in each run records the settings, the ACTS branch and
-revision, the build and the date, which is what a result is quoted with.
+`results/` is ignored by git except for the small files that summarise a run, so
+they can be pushed next to the code and the rest stays local. For any run name:
+
+```text
+tracked   run_info.txt, validation/scores.csv, validation/metrics.log,
+          validation/plots/*.png, timing/summary.csv, timing/event_timing.png,
+          hough/**/*.pdf
+          compare/<a>_vs_<b>/: patterns.log, scores.csv, speedup.csv,
+          speedup.log, plots/*.png, hough/**/*.pdf
+ignored   patterns.root, validation/tables/, validation/fastreco.root,
+          timing/events.csv, timing/repetitions/, logs/
+```
+
+That is about 3 MB for a run with the hough plots. The rules are in `.gitignore`;
+add a line there to track another file. `run_info.txt` in each run records the
+settings, the ACTS branch and revision, the build and the date, which is what a
+result is quoted with.
 
 ```text
 results/
@@ -116,8 +131,10 @@ results/
     logs/                   step 1: finder output of each repetition
     validation/             step 2: scores.csv, metrics.log, plots/, tables/,
                             fastreco.root
+    hough/                  step 3: the figures of MuonFastRecoValidation
   compare/
-    <reference>_vs_<compare>/   patterns.log, plots/, scores.csv, speedup.csv
+    <reference>_vs_<compare>/   patterns.log, plots/, scores.csv, speedup.csv,
+                                hough/ (step 3 with several runs)
 ```
 
 ## Two steps
@@ -165,6 +182,42 @@ Reads `results/<name>/patterns.root` and the input n-tuple (named in
 physics plots into `results/<name>/validation/`. The FastReco tuple needs ROOT,
 which the LCG environment provides; without it that stage is skipped and the rest
 finishes.
+
+### Step 3 (optional): the plotting package
+
+`MuonFastRecoValidation`, in houghidipuffvalidation (branch `LeonardoDev`), draws
+the efficiency, the fake rate and the hit and station plots of the ATLAS muon
+group from the `fastreco.root` of step 2. It needs an Athena release, which the
+LCG environment is not, so it runs in its own shell and its results are copied
+into the run's folder by the script:
+
+```bash
+setupATLAS
+cd ~/cern/muon-hough-validation          # the build directory of the package
+asetup --restore
+source x86_64-el9-gcc15-opt/setup.sh
+cd ~/cern/acts-gpf-utilities
+scripts/validation/run_hough_plots.sh cpu_pg0_all
+```
+
+One name writes into `results/<name>/hough/`. Several names draw one curve each
+and write into `results/compare/<first>_vs_<second>/hough/`; they have to be of
+the same sample, n-tuple and event count, as for `run_compare.sh`:
+
+```bash
+scripts/validation/run_hough_plots.sh cpu_before cpu_after
+```
+
+The executable takes its inputs from the command line, so changing what is drawn
+needs no rebuild:
+
+```text
+FastRecoValidation [--plot-dir DIR] [--out DIR] [--sample-name TEXT] [LABEL=]FILE.root ...
+```
+
+The plots that come from the reconstructed muons, the resolutions and the charge
+and `MuonEff*`, are empty, since the finder stops at the patterns. The fake rate
+and the efficiency on the patterns are drawn.
 
 ### Comparison (after the fact)
 

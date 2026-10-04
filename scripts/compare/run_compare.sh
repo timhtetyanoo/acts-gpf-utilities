@@ -79,7 +79,9 @@ if ((incompatible)); then
   exit 1
 fi
 
-rm -rf -- "${out_dir}"
+# replace what an earlier comparison wrote, and leave hough/, which step 3 writes
+rm -rf -- "${out_dir}/patterns.log" "${out_dir}/plots" "${out_dir}/scores.csv" \
+  "${out_dir}/speedup.csv" "${out_dir}/speedup.log"
 mkdir -p -- "${out_dir}"
 did_anything=0
 

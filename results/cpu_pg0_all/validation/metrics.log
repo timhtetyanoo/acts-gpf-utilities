@@ -1,0 +1,38 @@
+      threshold  efficiency  fake rate  duplicates
+            0.1      0.9953     0.0696       0.187
+            0.2      0.9952     0.0697       0.157
+            0.3      0.9951     0.0699       0.125
+            0.4      0.9933     0.0713       0.085
+            0.5      0.9827     0.0789       0.045
+            0.6      0.9569     0.0975       0.017
+            0.7      0.8904     0.1554       0.004
+            0.8      0.6959     0.3355       0.001
+            0.9      0.4128     0.5984       0.000
+            1.0      0.0000     1.0000       0.000
+
+sample                     PG0
+implementation             cpu_pg0_all
+station_eff_thr            0.5
+bending_eff_thr            0.5
+events                     50673
+truth_muons                84629
+truth_muons_all            100550
+patterns                   120427
+efficiency                 0.9826537002682295
+mean_completeness          0.8587120554015922
+mean_purity                0.9532879541165915
+mean_mismatched            0.0
+mean_selectivity           0.6814732345486263
+median_meanSqPull          5.7003585218088695
+fake_rate                  0.0788595766161307
+fake_fraction              0.23072898934624295
+patterns_per_event         2.376551615258619
+unmatched_per_event        0.46156730408698915
+unmatched_fraction         0.1942172436413761
+duplicates_per_found_muon  0.04469643222183475
+dEta_mean                  -7.743207564286784e-05
+dEta_std                   0.012283299917695438
+dPhi_mean                  7.959163080055039e-05
+dPhi_std                   0.015360665250062475
+
+results/cpu_pg0_all/validation/scores.csv
