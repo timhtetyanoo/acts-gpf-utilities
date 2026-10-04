@@ -8,6 +8,7 @@ that a change on either side can be traced back.
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 
 # --- the muon identifier -----------------------------------------------------
 # Bit layout of `spacePoint_muonId` and `hit_muonId`, transcribed from
@@ -164,3 +165,129 @@ def expanded_sector_pair(expanded):
     if main == N_SECTORS and projector == 1:
         return main, 1
     return main, main + projector
+
+
+# --- the selection and the matching of MuonFastRecoValidation --------------
+# Transcribed from MuonFastRecoValidTuple.h on the LeonardoDev branch of
+# houghidipuffvalidation, so that the numbers here are the ones the plotting
+# package computes from the same patterns. Each function names its original.
+
+#: tpEtaMax and tpPtMin, the kinematic acceptance of a truth muon
+TP_ETA_MAX = 2.4
+TP_PT_MIN_GEV = 10.0
+#: minTrigEtaHits, minPrecHits, minStations, minBendPerStation of tpHitSel
+MIN_TRIG_ETA_HITS = 2
+MIN_PREC_HITS = 8
+MIN_STATIONS = 2
+MIN_BEND_PER_STATION = 4
+#: stationEffThr and NBendingEffThr of effQuality, both compared with a strict >
+STATION_EFF_THR = 0.5
+BENDING_EFF_THR = 0.5
+
+#: seedingLayers = {Middle, Outer}: BM, BO, EM, EO as Muon::MuonStationIndex::
+#: toLayerIndex(StIndex) maps them, in StIndex order
+SEEDING_STATIONS = np.array([1, 2, 5, 6])
+
+#: The branches are UChar_t, so the plotting package reads every count clipped
+#: at 255; the same clip here keeps a ratio of two counts the same number
+UCHAR_MAX = 255
+
+
+def stack_counts(column):
+    """A column of per-station count arrays as an (entries, stations) array."""
+    rows = list(column)
+    if not rows:
+        return np.zeros((0, N_STATIONS), dtype=np.int64)
+    return np.minimum(np.stack(rows).astype(np.int64), UCHAR_MAX)
+
+
+def truth_selection(muons, eta_max=TP_ETA_MAX, pt_min=TP_PT_MIN_GEV):
+    """Which truth muons enter the efficiency, tpHitSel.
+
+    Inside |eta| < 2.4 and above 10 GeV, with at least two stations holding four
+    or more bending hits, two trigger hits in the middle and outer layers, and
+    eight precision hits in all. The tuple stores eta and pT as floats and pT in
+    MeV, and the comparison is made in those types.
+    """
+    prec = stack_counts(muons["genPrecMeas"])
+    trig = stack_counts(muons["genNonPrecMeas"])
+    n_stations = ((prec + trig) >= MIN_BEND_PER_STATION).sum(axis=1)
+    n_trig = trig[:, SEEDING_STATIONS].sum(axis=1)
+    eta = muons["eta"].to_numpy().astype(np.float32)
+    pt_mev = (muons["pt"].to_numpy().astype(np.float64) * 1.0e3).astype(np.float32)
+    selected = ((np.abs(eta) < np.float32(eta_max))
+                & (pt_mev.astype(np.float64) * 1.0e-3 >= pt_min)
+                & (n_stations >= MIN_STATIONS)
+                & (n_trig >= MIN_TRIG_ETA_HITS)
+                & (prec.sum(axis=1) >= MIN_PREC_HITS))
+    return pd.Series(selected, index=muons.index)
+
+
+def pattern_truth(patterns):
+    """The muon a pattern is matched to, getPatTruthPar: the first of the muons
+    that share a hit with it, most shared first. -1 when it shares none."""
+    return np.array([int(v[0]) if len(v) else -1 for v in patterns["matchedMuons"]],
+                    dtype=np.int64)
+
+
+def pattern_quality(patterns, muons, station_thr=STATION_EFF_THR,
+                    bending_thr=BENDING_EFF_THR):
+    """Which patterns count as a match of their muon, hasQualityTruth.
+
+    The pattern has to cross more than `station_thr` of the stations the muon
+    crossed, and to hold more than `bending_thr` of the muon's bending hits. The
+    two ratios are compared as `ratio <= threshold` fails, so a muon with no hits
+    at all (0/0) does not fail, as in effQuality.
+
+    @return the truth muon of every pattern and a boolean per pattern
+    """
+    truth = pattern_truth(patterns)
+    quality = np.zeros(len(patterns), dtype=bool)
+    has = truth >= 0
+    if not has.any():
+        return truth, quality
+    sub = patterns.loc[has]
+    gen = pd.DataFrame({"event": sub["event"].to_numpy(), "muon": truth[has]}).merge(
+        muons[["event", "muon", "genPrecMeas", "genNonPrecMeas"]],
+        on=["event", "muon"], how="left")
+    gen_prec, gen_trig = stack_counts(gen["genPrecMeas"]), stack_counts(gen["genNonPrecMeas"])
+    pat_prec, pat_trig = stack_counts(sub["nPrecMeas"]), stack_counts(sub["nNonPrecMeas"])
+    truth_prec = stack_counts(sub["nTruthPrecMeas"])
+    truth_trig = stack_counts(sub["nTruthNonPrecMeas"])
+
+    gen_stations = (gen_prec + gen_trig) > 0
+    pat_stations = (pat_prec + pat_trig) > 0
+    with np.errstate(divide="ignore", invalid="ignore"):
+        station_ratio = (gen_stations & pat_stations).sum(axis=1) / gen_stations.sum(axis=1)
+        bending_ratio = (truth_prec + truth_trig).sum(axis=1) / (gen_prec + gen_trig).sum(axis=1)
+    quality[has] = ~(station_ratio <= station_thr) & ~(bending_ratio <= bending_thr)
+    return truth, quality
+
+
+def best_match(patterns, quality, truth):
+    """Which matched pattern stands for its muon, isBestMatch.
+
+    The one with the most of the muon's bending hits, and among those the
+    smallest mean normalised residual. It has to beat every other match of the
+    muon strictly: two matches equal in both leave none of them the best, which
+    is how the plotting package behaves and makes it count the muon as missed.
+    """
+    best = np.zeros(len(patterns), dtype=bool)
+    if not quality.any():
+        return best
+    sub = patterns.loc[quality]
+    frame = pd.DataFrame({
+        "event": sub["event"].to_numpy(),
+        "truth": truth[quality],
+        "nbend": (stack_counts(sub["nTruthPrecMeas"])
+                  + stack_counts(sub["nTruthNonPrecMeas"])).sum(axis=1),
+        "resid": sub["meanNormResidual2"].to_numpy().astype(np.float32),
+        "row": np.flatnonzero(quality),
+    }).sort_values(["event", "truth", "nbend", "resid"],
+                   ascending=[True, True, False, True], kind="stable")
+    group = frame.groupby(["event", "truth"], sort=False)
+    next_nbend, next_resid = group["nbend"].shift(-1), group["resid"].shift(-1)
+    strictly = (next_nbend.isna() | (frame["nbend"] > next_nbend)
+                | ((frame["nbend"] == next_nbend) & (frame["resid"] < next_resid)))
+    best[frame.loc[(group.cumcount() == 0) & strictly, "row"].to_numpy()] = True
+    return best

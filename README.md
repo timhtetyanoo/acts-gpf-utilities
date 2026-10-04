@@ -6,7 +6,8 @@ the run entry point stay in ACTS; this repository keeps the scripts that drive
 them, measure the output and draw the plots.
 
 The CPU example is the reference against which the CUDA implementation will be
-validated, so every script takes the implementation as a parameter.
+validated: each implementation is a named run with its own build, and the
+comparison takes two runs by name.
 
 The chain follows Athena's `MuonFastRecoTester`: one stage produces numbers and
 nothing else, a later stage decides what those numbers mean. A change to the
@@ -17,22 +18,24 @@ pattern finder again.
 
 ```text
 scripts/
-  gpf_common.sh                        shared n-tuple helpers
+  gpf_common.sh                        shared helpers: flags, config, python, n-tuples
+  run/
+    run_finder.sh                      STEP 1: run the finder -> patterns + timing
+    aggregate_event_timing.py          C++ per-event csv -> summary
+    plot_event_timing.py               cost vs occupancy
   validation/
-    run_full_validation.sh             physics chain, every stage skippable
-    run_global_pattern_validation.sh   run the finder, write pattern files
+    run_validation.sh                  STEP 2: patterns + n-tuple -> metrics and figures
     gpfval.py                          definitions transcribed from ACTS & Athena
     build_validation_tables.py         patterns + truth -> the validation tables
     compute_metrics.py                 the tables -> efficiency, fakes, residuals
     make_plots.py                      the four figures
+    to_fastreco_tuple.py               tables -> MuonFastRecoValidation n-tuple
     compare_patterns.py                two pattern files, hit by hit
   compare/
-    run_compare.sh                     compare existing validation & timing outputs
+    run_compare.sh                     compare two runs and two validations
     compare_timing.py                  two timing summaries -> speedup table
-  benchmark/
-    run_timing_benchmark.sh            timing only: no patterns, quiet logs
-    aggregate_event_timing.py          C++ per-event csv -> summary
-    plot_event_timing.py               cost vs occupancy
+configs/                               one config per run: its name, sample and build
+results/                               everything the scripts write, ignored by git
 docs/
   acts_changes.md                      what this work changed in the ACTS checkout
 ```
@@ -42,14 +45,13 @@ docs/
 - Bash;
 - an ACTS build containing `ActsUnitTestGlobalPatternFinderData`, for stage 1
   only; the analysis stages need no build;
-- Python 3.10 or newer with the packages of `requirements.txt`;
+- Python 3.10 or newer with the packages of `requirements.txt` and, for the
+  FastReco tuple, ROOT: the LCG environment of `env_setup.sh` has all of them;
 - the Athena-exported n-tuples and the matching tracking geometry.
 
-```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-```
-
-The scripts default to `.venv/bin/python` and fall back to `python3`.
+Source `env_setup.sh` before running anything. The scripts use the `python3` of
+that shell and nothing else; `PYTHON=` or `--python` names another interpreter.
+There is no virtual environment.
 
 ## Inputs
 
@@ -67,82 +69,123 @@ data/ActsTrackingGeometry.json
 
 `GPF_DATA_DIR` points the scripts elsewhere.
 
-## Two pipelines
+## Runs, settings and results
 
-Both run `bin/ActsUnitTestGlobalPatternFinderData`. `GPF_IMPLEMENTATION`
-(`cpu` now, later `cuda`) names the output directory and goes into the file
-names, so a second implementation is a second run and the two sit side by side:
+A **run** has a name, and everything it produces goes into `results/<name>/`.
+The name is the only thing that tells two runs apart, so give each run one that
+says what it is: `cpu_pg0_all`, `cuda_pg200_500ev`. A config file holds one run:
+
+```bash
+# configs/cpu_pg0_all.conf
+GPF_NAME=cpu_pg0_all
+GPF_SAMPLE=PG0
+GPF_EVENTS=all
+GPF_REPETITIONS=3
+ACTS_BUILD_DIR="$HOME/cern/acts/build"
+```
+
+Both steps and the comparison take their settings from flags, a config file or
+environment variables. Where they disagree the order is
 
 ```text
-gpf_validation/cpu/   gpf_validation/cuda/
-gpf_timing/cpu/       gpf_timing/cuda/
+flag  >  config file  >  environment variable  >  the script's default
 ```
 
-`scripts/compare/` then takes a pair of them.
-
-### Validation (physics only)
+so a config can be bent for one run from the command line:
 
 ```bash
-scripts/validation/run_full_validation.sh
+scripts/run/run_finder.sh --config configs/cpu_pg0_all.conf
+scripts/run/run_finder.sh --config configs/cpu_pg0_all.conf --name cpu_pg0_quick --events 100
+scripts/validation/run_validation.sh --name cpu_pg0_quick
 ```
 
-Writes patterns, tables, the FastReco tuple, `scores.csv` and the physics
-plots into `gpf_validation/<implementation>/`. It does not time anything. `GPF_FORCE=1` redoes
-stages whose output already exists. Stage 1 needs the build; the later stages
-run anywhere. `ACTS_BUILD_DIR=` (empty) skips the finder and analyses files
-that are already there.
+A config is plain bash assignments. The flags and the variable each one sets are
+listed in `scripts/gpf_common.sh`, and `--help` prints the header of a script.
 
-### Performance (timing only)
+`results/` is ignored by git as a whole, so nothing a run writes is ever
+tracked. `run_info.txt` in each run records the settings, the ACTS branch and
+revision, the build and the date, which is what a result is quoted with.
+
+```text
+results/
+  <name>/
+    run_info.txt            what was run
+    patterns.root           step 1: the finder's output, the input of step 2
+    timing/                 step 1: summary.csv, events.csv, event_timing.png,
+                            repetitions/ (raw)
+    logs/                   step 1: finder output of each repetition
+    validation/             step 2: scores.csv, metrics.log, plots/, tables/,
+                            fastreco.root
+  compare/
+    <reference>_vs_<compare>/   patterns.log, plots/, scores.csv, speedup.csv
+```
+
+## Two steps
+
+```text
+STEP 1  scripts/run/run_finder.sh             run the finder     -> results/<name>/
+STEP 2  scripts/validation/run_validation.sh  judge the patterns -> results/<name>/validation/
+```
+
+Step 1 is the only place the finder runs. Step 2 reads what step 1 wrote and
+never starts the finder, so it needs no ACTS build and no tracking geometry and
+can be repeated, changed or run on another machine for free. A change to the
+definition of "the pattern found the muon" never requires running the finder
+again. Both always redo everything: step 1 replaces the earlier run of the same
+name, which also removes its validation, because it would no longer belong to the
+new patterns.
+
+### Step 1: run the finder
 
 ```bash
-scripts/benchmark/run_timing_benchmark.sh
+source ~/cern/env_setup.sh
+scripts/run/run_finder.sh --config configs/cpu_pg0_all.conf
 ```
 
-No pattern file, WARNING logging, finder stdout kept off the terminal. Default
-One row per event, 500 events, 3 repetitions, then `event_timings.csv`,
-`event_summary.csv` and `plots/event_timing.png` under
-`gpf_timing/<implementation>/`. A GPU
-comparison is a later step: run each implementation into its own directory,
-then `scripts/compare/run_compare.sh`.
+Runs `bin/ActsUnitTestGlobalPatternFinderData` over the sample, once per
+repetition. Each repetition times every call of the finder and writes one row per
+event; the first one also writes the pattern file. The timer wraps the finder call
+only, so writing the patterns is not part of the measurement, and the finder logs
+at WARNING because its own messages are. Defaults: sample PG0, 500 events, 3
+repetitions, `../acts/build`.
 
 The Sequencer entry point of ACTS,
 `Examples/Scripts/Python/muon_global_pattern_finder.py`, reports a per
 component total for a whole run and is there to be run by hand when that view
 is wanted.
 
-Defaults shared by both: PG0, 500 events, `../acts/build`.
+### Step 2: validate
+
+```bash
+scripts/validation/run_validation.sh --name cpu_pg0_all
+```
+
+Reads `results/<name>/patterns.root` and the input n-tuple (named in
+`run_info.txt`) and writes tables, the FastReco tuple, `scores.csv` and the
+physics plots into `results/<name>/validation/`. The FastReco tuple needs ROOT,
+which the LCG environment provides; without it that stage is skipped and the rest
+finishes.
 
 ### Comparison (after the fact)
 
 ```bash
-scripts/compare/run_compare.sh \
-  --reference-validation gpf_validation/cpu --compare-validation gpf_validation/cuda \
-  --reference-timing     gpf_timing/cpu     --compare-timing     gpf_timing/cuda \
-  --reference-label cpu --compare-label cuda
+scripts/compare/run_compare.sh --reference cpu_pg0_all --compare cuda_pg0_all
 ```
 
-Takes the four directories as given: how they were produced and what the runs
-were called inside them makes no difference, and the labels come from the
-command line. Writes the hit-by-hit gate, the overlaid figures and the speedup
-table into `gpf_compare/`. Runs no finder. Each pair is optional, so physics
-only, timing only or both.
+Takes two runs by name. The patterns of the two give the hit-by-hit gate, their
+validations the overlaid figures and the metrics, their timings the speedup
+table, all in `results/compare/<reference>_vs_<compare>/`. It runs no finder, and
+a part is skipped when one of the runs lacks what it needs. Only compatible runs
+are compared: the same sample, the same n-tuple and the same event count, read
+from the `run_info.txt` of each. Otherwise it stops and says what differs.
 
-### 1. The patterns
+The stages inside step 2, which can also be run one by one on the files of a run:
 
-```bash
-scripts/validation/run_global_pattern_validation.sh
-```
-
-Each case writes `patterns_<sample>_<implementation>.root` and a log into
-`${GPF_OUT_DIR}` (by default `gpf_validation/<implementation>/`). Overrides:
-`GPF_SAMPLES`, `GPF_IMPLEMENTATION`, `GPF_MAX_EVENTS`,
-`GPF_GEOMETRY`, `GPF_OUT_DIR`, `GPF_<SAMPLE>_NTUPLE` and `GPF_FORCE`.
-
-### 2. The validation tables
+### 1. The validation tables
 
 ```bash
-scripts/validation/build_validation_tables.py patterns_PG0_cpu.root \
-  ParticleGun_MU0.root tables_PG0_cpu
+scripts/validation/build_validation_tables.py results/cpu_pg0_all/patterns.root \
+  data/ParticleGun_MU0.root results/cpu_pg0_all/validation/tables
 ```
 
 Three parquet tables. Nothing is extracted that no test consumes, and no
@@ -159,11 +202,11 @@ Of the 36 branches in the truth tree it reads 7, and of the 25 in the space
 point tree it reads 8. What each test needs and why is in
 [docs/validation.md](docs/validation.md).
 
-### 3. The metrics
+### 2. The metrics
 
 ```bash
-scripts/validation/compute_metrics.py tables_PG0_cpu --sample PG0 \
-  --implementation cpu --scan --output scores.csv
+scripts/validation/compute_metrics.py results/cpu_pg0_all/validation/tables \
+  --sample PG0 --implementation cpu_pg0_all --scan --output scores.csv
 ```
 
 Applies the definitions and appends one row to the csv, writing `muon_flags` and
@@ -171,11 +214,12 @@ Applies the definitions and appends one row to the csv, writing `muon_flags` and
 `TrackTruthMatcher`: a majority of the muon's surfaces *and* a majority of the
 pattern's hits, both at 0.5. `--scan` shows how the numbers move with it.
 
-### 4. The figures
+### 3. The figures
 
 ```bash
-scripts/validation/make_plots.py tables_PG0_cpu tables_PG0_cuda \
-  --labels cpu cuda --output-dir plots/PG0
+scripts/validation/make_plots.py results/cpu_pg0_all/validation/tables \
+  results/cuda_pg0_all/validation/tables \
+  --labels cpu_pg0_all cuda_pg0_all --output-dir plots
 ```
 
 One figure per test, with the quantities of that test side by side:
@@ -191,10 +235,11 @@ Fakes and duplicates are counts and live in the csv. What each panel means is
 in [docs/validation.md](docs/validation.md). Several table directories are
 overlaid, which is how CUDA is compared with the CPU reference.
 
-### 5. Comparison of two runs
+### 4. Comparison of two pattern files
 
 ```bash
-scripts/validation/compare_patterns.py patterns_PG0_cpu.root patterns_PG0_cuda.root
+scripts/validation/compare_patterns.py results/cpu_pg0_all/patterns.root \
+  results/cuda_pg0_all/patterns.root
 ```
 
 Two runs over the same space points, compared. Nothing in it knows which
@@ -225,9 +270,9 @@ The exit code is non-zero when the agreement falls below `--min-matched`,
 `--min-jaccard` or `--tolerance`. The defaults demand exact agreement, which is
 what a pure reordering of the same arithmetic gives; loosen them deliberately
 once the CUDA version is known to differ, rather than ignoring a red exit.
-`scripts/compare/run_compare.sh` runs it over two validation directories.
+`scripts/compare/run_compare.sh` runs it over the patterns of two runs.
 
-It answers a different question from stage 5. This one asks how far the two runs
+It answers a different question from the figures of step 2. This one asks how far the two runs
 drifted apart, hit by hit; the overlaid figures ask whether a run that drifted is
 still as good physically. A red exit here is a reason to look at the figures, not
 a verdict on its own.
@@ -268,11 +313,16 @@ can exceed one where a layer holds several hits.
 
 ### What counts as found
 
-Ours, since Athena defines nothing and only stores counts. A pattern matches its
-main muon when it collected at least `--min-completeness` of that muon's
-findable precision hits and holds hits of it in at least `--min-stations`
-stations. The second mirrors the `minGroups` of the finder: a pattern confined
-to one station is not a muon candidate.
+The definitions of `MuonFastRecoValidation`, transcribed in `gpfval.py`, so that
+the efficiency and the fake rate are the numbers its plots show for the same
+patterns. A truth muon enters the efficiency when it lies inside |eta| < 2.4 and
+above 10 GeV and left enough hits (two stations with four bending hits each, two
+trigger hits in the middle and outer layers, eight precision hits). A pattern
+matches its muon when it crosses more than half of the muon's stations and holds
+more than half of its bending hits; the match with the most bending hits stands
+for the muon, and a pattern that is not that match is a fake.
+[docs/validation.md](docs/validation.md) has the full definition and where each
+number comes from.
 
 ### The angular residuals
 
@@ -309,6 +359,8 @@ which the pattern does not estimate.
 
 ## Reproducibility
 
-Record the ACTS revision, the revision of this repository, the input files, the
-build configuration and, for timings, the machine, the GPU model and the number
-of repetitions together with any published numbers.
+`results/<name>/run_info.txt` records the settings of a run, the n-tuple, the
+build, the ACTS branch and revision (with a note when the checkout had local
+changes), the revision of this repository, the machine, the GPU and the dates.
+Quote it with any published number, and add the build configuration, which it
+does not hold.

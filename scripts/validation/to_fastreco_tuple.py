@@ -9,8 +9,10 @@ the patterns the ACTS example found, with no change to either repository.
 
 Only counts are written. Every threshold stays on the reading side, in
 MuonFastRecoValidTupleHelpers: `pat_truthMatched` lists every muon sharing a hit,
-most-shared first, and their `effQuality` decides what counts as found. The
-numbers of compute_metrics.py are therefore not reproduced but compared against.
+most-shared first, and their `effQuality` decides what counts as found.
+compute_metrics.py applies the same definitions (gpfval.truth_selection,
+pattern_quality, best_match), so its efficiency and fake rate are the numbers the
+plotting package shows for this tuple.
 
 Three groups of branches cannot be filled from the export and are written as
 zeros, which leaves the plots that use them empty and breaks nothing:
@@ -152,6 +154,12 @@ def build(muons: pd.DataFrame, patterns: pd.DataFrame, saturation: Saturation):
     for branch in ("pat_NPileupPrecMeas", "pat_NPileupNonPrecMeas",
                    "pat_NPileupPhiMeas"):
         branches[branch] = [[[0] * gpfval.N_STATIONS] * n for n in n_patterns]
+    # the reconstructed muons built from the patterns downstream; the finder
+    # stops at the patterns, so there are none. The branches exist and are empty,
+    # which MuonFastRecoValidation needs (it stops on a missing branch) and which
+    # leaves its muon plots, the resolutions and the charge, empty.
+    for branch in ("muon_Eta", "muon_Phi", "muon_Pt", "muon_Q", "muon_patMatched"):
+        branches[branch] = [[] for _ in n_patterns]
     # absent from the export, written so the branches exist
     n_events = len(events)
     for branch in ("runNumber", "lbNumber", "bcid", "mcChannelNumber"):
@@ -212,6 +220,11 @@ def write_ttree(path: Path, branches: dict) -> None:
         "pat_Sector1": ROOT.std.vector["unsigned short"](),
         "pat_Sector2": ROOT.std.vector["unsigned short"](),
         "pat_Side": ROOT.std.vector["short"](),
+        "muon_Eta": ROOT.std.vector["float"](),
+        "muon_Phi": ROOT.std.vector["float"](),
+        "muon_Pt": ROOT.std.vector["float"](),
+        "muon_Q": ROOT.std.vector["short"](),
+        "muon_patMatched": ROOT.std.vector["unsigned char"](),
     }
     for name, vec in vectors.items():
         tree.Branch(name, vec)

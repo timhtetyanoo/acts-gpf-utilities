@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Plot the per event timings of the C++ data test.
 
-Two panels, from `event_timings.csv` of aggregate_event_timing.py:
+Two panels, from `events.csv` of aggregate_event_timing.py:
 
     left   the cost of an event against the hits it holds, which separates a
            busier event from a slower one
@@ -30,7 +30,7 @@ plt.rcParams.update({"figure.dpi": 150, "font.size": 9,
 def main() -> int:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("events", type=Path, help="event_timings.csv")
+    p.add_argument("events", type=Path, help="events.csv")
     p.add_argument("--output", type=Path, required=True)
     args = p.parse_args()
 
@@ -41,8 +41,7 @@ def main() -> int:
     data["totalTime_ms"] = data["totalTime_us"] / 1e3
 
     fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.4))
-    for label, run in data.groupby(["sample", "implementation"]):
-        name = " ".join(label)
+    for name, run in data.groupby("run"):
         axes[0].plot(run["nSpacePoints"], run["totalTime_ms"], ".", ms=2,
                      alpha=0.5, label=name)
         axes[1].hist(run["totalTime_ms"], bins=40, histtype="step", lw=1.3,

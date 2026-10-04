@@ -3,10 +3,12 @@
 What each test measures, how it is computed, and what it cannot tell you.
 
 Two references are used throughout. Athena's `MuonFastRecoTester` decides what
-is worth counting, and writes counts without defining any figure of merit from
-them. ACTS supplies the matching convention, `TrackTruthMatcher`, which is where
-the thresholds come from. Where neither settles a question the choice is ours
-and is stated so it can be argued with.
+is worth counting and writes counts without defining a figure of merit from
+them. `MuonFastRecoValidation` (houghidipuffvalidation, branch `LeonardoDev`)
+defines the figures: which truth muons count, when a pattern matches one, and
+what a fake is. Those definitions are transcribed in `scripts/validation/gpfval.py`
+so that the numbers here are the ones its plots show. Where neither settles a
+question the choice is ours and is stated so it can be argued with.
 
 The five tests:
 
@@ -22,136 +24,108 @@ The five tests:
 
 ### What it measures
 
-The fraction of the muons that were really there for which the pattern finder
-produced a pattern that is recognisably that muon's.
+The fraction of the truth muons that the finder could be expected to find for
+which it produced a pattern that is that muon's.
 
 ### Definition
 
+The selection, the matching and the choice of the pattern that stands for a muon
+are those of `MuonFastRecoValidTuple.h`:
+
 ```
-for each truth muon:
-    T = the muon's surface identifiers that produced a space point
-    P = a pattern's surface identifiers
+selected truth muon (tpHitSel), all of
+    |eta| < 2.4 and pT >= 10 GeV
+    at least 2 stations with >= 4 bending hits each   (precision + trigger eta)
+    at least 2 trigger eta hits in the middle and outer layers
+    at least 8 precision hits
 
-    completeness = |P ∩ T| / |T|          how much of the muon the pattern got
-    purity       = hits of that muon / all hits of the pattern
+a pattern P matches its muon T (effQuality) when
+    T is the muon that shares the most hits with P
+    stations of T that P crosses / stations of T       >  0.5
+    bending hits of T held by P  / bending hits of T   >  0.5
 
-    found = there is a pattern with  completeness >= 0.5
-                                and  purity       >= 0.5
-                                and  hits of that muon in at least two stations
+the pattern that stands for T (isBestMatch) is the match with the most of T's
+    bending hits, ties to the smallest mean normalised residual. It has to beat
+    every other match of T strictly.
 
-efficiency = found muons / all truth muons
-```
-
-### Why 0.5, and why both ratios
-
-Both come from ACTS rather than from our data. `TrackTruthMatcher` matches a
-track to a particle with exactly this pair of conditions:
-
-```cpp
-const bool recoMatched  = nMajorityHits / track.nMeasurements() >= matchingRatio;
-const bool truthMatched = nMajorityHits / particleTruthHitCount.at(majorityParticleId) >= matchingRatio;
-if ((!doubleMatching && recoMatched) || (doubleMatching && recoMatched && truthMatched))
+efficiency = selected muons that have a best match / selected muons
 ```
 
-with `matchingRatio = 0.5` and `doubleMatching = true`. The same 0.5 appears in
-`CsvTrackWriter`, `RootMeasurementPerformanceWriter` and
-`defineReconstructionPerformance.C`. It is the majority — more than half the
-hits — not a value anyone fitted to a sample, and deriving it from our own data
-would be tuning the measurement to its result.
+Both thresholds are compared with a strict `>`, as in the source, and the counts
+are read as `UChar_t`, clipped at 255 per station, because the plotting package
+reads them that way.
 
-Requiring **both** ratios is what `doubleMatching` does, and it matters here.
-Completeness alone would count a pattern that swept up a whole chamber,
-collected 80% of the muon incidentally and is 90% unrelated hits. Purity alone
-would count a pattern that is clean but holds a tenth of the muon.
+### Where the definitions come from
 
-One deliberate difference from ACTS: our completeness counts **identifiers**
-while purity counts **hits**. Identifiers are the right unit on the truth side
-because they reproduce Athena's per-layer deduplication for free; hits are the
-right unit for what a pattern is physically made of. ACTS uses hits for both
-because it has a truth link per measurement and does not need the identifier
-proxy.
+They are transcribed, not chosen: `gpfval.truth_selection`,
+`gpfval.pattern_quality` and `gpfval.best_match` are `tpHitSel`, `effQuality` and
+`isBestMatch`, and each names its original. The thresholds are the constants of
+that header: `tpEtaMax`, `tpPtMin`, `minTrigEtaHits`, `minPrecHits`,
+`minStations`, `minBendPerStation`, `stationEffThr`, `NBendingEffThr`, and
+`seedingLayers`, which are the stations BM, BO, EM and EO. On `cpu_pg0_all` the
+efficiency from `compute_metrics.py`, 0.9827, agrees with the cumulative
+efficiency the plotting package draws for the same patterns, about 0.983.
+
+A change there has to be made here as well, or the two stop agreeing.
 
 ### Where the numbers come from
 
 | quantity | source |
 | --- | --- |
 | the truth muons | `Muons_*` of the `MuonTruth` tree, one row per muon |
-| a muon's identifiers | `Segments_hitGeoIds`, grouped by `Segments_truthLink` |
-| which of them produced a hit | intersected with `spacePoint_geometryId` of that event |
-| a pattern's identifiers | `hit_geometryId`, grouped by `hit_patternIdx` |
-| the station of a hit | the station field of its own `spacePoint_muonId` |
+| the hits a muon left per station | its identifiers (`Segments_hitGeoIds`) that produced a space point in that event, split into precision, trigger eta and phi |
+| the hits of a pattern per station | `hit_station` and the muon identifier of its hits |
+| the truth hits of a pattern per station | those of its hits whose identifier is one of the muon's |
 
-Nothing else is used. In particular the efficiency does not touch the tracking
-geometry, `Segments_chamberIdx`, `Segments_posX/Y/Z`, `Segments_localSegPars` or
-the layer field of the muon identifier.
+Nothing else is used. The efficiency does not touch the tracking geometry.
 
-### Why it is built this way
+### Why the truth is counted in identifiers
 
-**Identifiers rather than hits.** Athena matches a measurement to a truth
-particle through the sim hit behind it, a link the export does not carry. Our
-substitute is the surface: a hit belongs to a muon when its identifier is one of
-the identifiers of that muon's truth segments, which `TruthSegmentWriter` fills
-with the surfaces of exactly those sim hits.
-
-**Distinct identifiers rather than a hit count.** Counting distinct identifiers
-reproduces Athena's deduplication rule for free: a strip identifier is a gas
-gap, so one identifier per layer, and an MDT identifier is a tube, so several
-per layer survive — which is their "one per layer, except straws". It also
-avoids the layer field, which is four bits wide and folds.
-
-**A fraction, not an absolute count.** A threshold on an absolute number of
-shared identifiers is harsh on a muon that only clipped the detector and lenient
-on one that crossed it fully. The fraction adapts to how much the muon left
-behind.
-
-**Findable identifiers as the denominator of that fraction.** Athena counts its
-truth hits from the space points and not from the segments, "because we have sim
-hits that haven't made it into spacepoints due to inefficiencies"
-(`MuonFastRecoTester.cxx`). Counting surfaces that recorded nothing would make
-completeness pessimistic for reasons that have nothing to do with the finder.
-
-**Two stations of that muon's hits.** A pattern confined to a single station is
-not a muon candidate. Note the requirement is on the muon's hits, not on the
-pattern: the finder already guarantees every pattern it emits spans two stations
-with at least `minGroupLayers` hits each (`passPatternCuts`), but a pattern can
-satisfy that with the muon's hits in one station and something else in the
-other.
-
-**Every truth muon in the denominator.** No cut derived from the finder's own
-configuration may appear here. Tying the denominator to `minGroups` or
-`minGroupLayers` would let the efficiency be improved by loosening the
-algorithm, which is circular. Acceptance is made visible by binning rather than
-removed by a cut.
+Athena matches a measurement to a truth particle through the sim hit behind it,
+a link the export does not carry. The substitute is the surface: a hit belongs to
+a muon when its identifier is one of the identifiers of that muon's truth
+segments, which `TruthSegmentWriter` fills with the surfaces of exactly those sim
+hits. Counting distinct identifiers also reproduces Athena's deduplication for
+free, since a strip identifier is a gas gap and an MDT identifier a tube.
 
 ### How it is presented
 
-Against truth η and truth pT, which is ACTS's own convention: `EffPlotTool` bins
-efficiency against `truth #eta` and `truth p_{T}` and is filled once per truth
-particle with a boolean.
+Against truth pT (45 bins from 10 to 100 GeV), η (25 bins from -2.4 to 2.4) and
+φ (50 bins over ±180 degrees), the binning of the plotting package. The error
+bars are Clopper-Pearson intervals at 68.3%, ROOT's `TEfficiency` default.
 
-**No acceptance cut is applied to the denominator.** Every truth muon counts,
-including those beyond the spectrometer's coverage, so the coverage edge appears
-as the curve falling rather than being removed by a threshold. Neither reference
-supplies a number to cut at: `MuonFastRecoTester` applies no η selection at all,
-writing `gen_Eta` for every truth particle and leaving the choice to the
-analysis, and ACTS bins rather than cuts. Choosing a cut ourselves would put a
-number in the headline result that nothing justifies.
+The selection is applied to the denominator, so the coverage edge of the
+spectrometer does not appear: muons outside |η| < 2.4 are not counted. A single
+figure is quoted together with this selection, and the plot is the primary
+result. The number of selected muons is `truth_muons` in `scores.csv`, next to
+`truth_muons_all`.
 
-A single figure is therefore always quoted together with the η and pT range it
-covers, and the plot is the primary result.
+### What changed
+
+Earlier versions counted every truth muon and called a muon found when a pattern
+had at least half of its findable identifiers and at least half of the pattern's
+hits were its own, in two stations (ACTS's `TrackTruthMatcher`). That criterion
+is gone. Numbers from runs made before the change are not comparable with the
+ones made after it.
 
 ### What it cannot tell you
 
 - **A wrong hit on a right surface counts as found.** An identifier is one tube
   for an MDT but a whole gas gap for a strip chamber, so a pattern holding the
-  wrong strip of the right gap is indistinguishable here. Test 3 exists for
-  that.
+  wrong strip of the right gap is indistinguishable here. Test 3 exists for that.
 - **It says nothing about what else the pattern picked up.** A pattern
   containing the whole muon and fifty stray hits is fully efficient. That is
   purity's job.
+- **The selection reads the muon's hits, not the finder's configuration**, so
+  loosening the finder cannot change which muons are counted. A muon that left
+  too few hits is excluded, and nothing here says how many those are beyond
+  `truth_muons_all` minus `truth_muons`.
+- **Two best matches that are equal in both quantities leave the muon without
+  one.** The source requires a strict win, so such a muon counts as missed and
+  both patterns as fakes. It is rare, since the residual is a real number, but it
+  happens for patterns with identical hits.
 - **The samples carry no pile-up truth particles**, only the one or two gun
-  muons, so every truth muon is a signal muon and the efficiency is measured
-  only against those.
+  muons, so every truth muon is a signal muon.
 
 
 ---
@@ -370,24 +344,28 @@ one.
 ### Definition
 
 ```
-unmatched  a pattern that matches no truth muon at the criterion of test 1
-duplicate  a matched pattern that is not the best one of its muon
+fake       a pattern that is not the best match of a muon: it matches no muon,
+           or it is a further match of one
+fake rate  per event, fake patterns / patterns, averaged over the events that
+           have a pattern and a truth muon        (MuonFastRecoValidation)
+fake fraction = fake patterns / all patterns of the sample
 
-unmatched per event
-unmatched fraction = unmatched / all patterns
+unmatched  a pattern that matches no truth muon, at the criterion of test 1
+duplicate  a match that is not the best one of its muon
 duplicates per found muon
 ```
 
-The best pattern of a muon is the one sharing the most of its identifiers; every
-further matching pattern is a duplicate. Duplicates are **not** counted as
-unmatched: they correspond to a real muon and are a different failure.
+The fake rate is the figure the plotting package draws as `CumulativeFakeRate`:
+the fraction is taken per event and then averaged, so an event with two patterns
+weighs as much as one with twenty, and duplicates count as fakes. The two
+fractions differ a lot where the fakes sit in a few busy events: on
+`cpu_pg0_all` the fake rate is 0.079 and the fake fraction 0.231. Quote the
+fake rate next to the plotting package's number and the fraction when the
+share of the patterns is what matters.
 
-A pattern is unmatched when it fails the criterion of test 1, not when it shares
-nothing at all with any muon. The two categories then cover everything between
-them — every pattern is either a match or unmatched — so efficiency and this
-number stay consistent by construction. The criterion is ACTS's, both ratios at
-0.5, so it is fixed by convention rather than tuned; if it is ever changed, both
-numbers have to be requoted together.
+Unmatched and duplicates are the two parts of the fakes, kept apart because they
+are different failures: an unmatched pattern corresponds to no muon, a duplicate
+to a muon that was found already.
 
 ### Only in a sample without pile-up is this a fake rate
 

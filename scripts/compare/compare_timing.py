@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """Put two timing summaries side by side and divide them.
 
-Reads the `event_summary.csv` that aggregate_event_timing.py writes for each
-run and joins them on the sample, giving one row per sample:
+Reads the `summary.csv` that aggregate_event_timing.py writes for each run and
+reduces each to its median over the repetitions, giving one row:
 
-    sample, <reference>_ms, <compare>_ms, speedup, ...
+    mean time, <reference> (ms) | mean time, <compare> (ms) | mean time speedup | ...
 
 The speedup is the reference divided by the compared value, so a number above
 one means the compared run is faster.
 
-The two summaries are taken as they are. Where they came from, how they were
-produced and what the runs were called inside them makes no difference; the
-labels are given on the command line.
+The two summaries are taken as they are; the labels are given on the command
+line.
 """
 
 from __future__ import annotations
@@ -22,46 +21,43 @@ from pathlib import Path
 
 import pandas as pd
 
-#: Columns compared, as source -> (name in the output, scale, unit)
+#: Columns compared, as source column -> (name in the output, scale, unit)
 COLUMNS = {
-    "median_us": ("median", 1e-3, "ms"),
-    "p90_us": ("p90", 1e-3, "ms"),
-    "us_per_spacepoint": ("perSpacePoint", 1.0, "us"),
+    "mean time (us)": ("mean time", 1e-3, "ms"),
+    "median time (us)": ("median time", 1e-3, "ms"),
+    "p90 time (us)": ("p90 time", 1e-3, "ms"),
+    "median time per space point (us)": ("time per space point", 1.0, "us"),
 }
 
 
-def per_sample(path: Path) -> pd.DataFrame:
-    """One row per sample, averaging over whatever runs the summary holds."""
+def per_run(path: Path) -> pd.Series:
+    """The median over the repetitions the summary holds."""
     frame = pd.read_csv(path)
     missing = [c for c in COLUMNS if c not in frame.columns]
     if missing:
         raise SystemExit(f"{path} has no column {missing[0]}")
-    return frame.groupby("sample")[list(COLUMNS)].median().reset_index()
+    return frame[list(COLUMNS)].median()
 
 
 def main() -> int:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("reference", type=Path, help="event_summary.csv of the reference")
-    p.add_argument("compared", type=Path, help="event_summary.csv to compare")
+    p.add_argument("reference", type=Path, help="summary.csv of the reference")
+    p.add_argument("compared", type=Path, help="summary.csv to compare")
     p.add_argument("--reference-label", default="reference")
     p.add_argument("--compare-label", default="compared")
     p.add_argument("--output", type=Path, required=True)
     args = p.parse_args()
 
-    reference = per_sample(args.reference)
-    compared = per_sample(args.compared)
-    joined = reference.merge(compared, on="sample", suffixes=("_ref", "_cmp"))
-    if joined.empty:
-        raise SystemExit("The two summaries have no sample in common")
+    reference = per_run(args.reference)
+    compared = per_run(args.compared)
 
-    out = pd.DataFrame({"sample": joined["sample"]})
+    row = {}
     for column, (name, scale, unit) in COLUMNS.items():
-        reference_values = joined[f"{column}_ref"]
-        compared_values = joined[f"{column}_cmp"]
-        out[f"{name}_{args.reference_label}_{unit}"] = reference_values * scale
-        out[f"{name}_{args.compare_label}_{unit}"] = compared_values * scale
-        out[f"{name}_speedup"] = reference_values / compared_values
+        row[f"{name}, {args.reference_label} ({unit})"] = reference[column] * scale
+        row[f"{name}, {args.compare_label} ({unit})"] = compared[column] * scale
+        row[f"{name} speedup"] = reference[column] / compared[column]
+    out = pd.DataFrame([row])
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(args.output, index=False)

@@ -17,12 +17,14 @@ cover the algorithm alone. `steady_clock` is monotonic, so a change of the
 system time leaves the durations intact.
 
 The hit counts share the row because they separate a busier event from a slower
-one: `us_per_spacepoint` is flat when the cost per unit of work is unchanged and
+one: `median time per space point (us)` is flat when the cost per unit of work is unchanged and
 the sample is merely denser.
 
 `aggregate_event_timing.py` summarises the runs, dropping the first event of
-each because it pays for cold caches, and quotes medians rather than means for
-the same reason. `scripts/compare/compare_timing.py` divides two summaries into
+each because it pays for cold caches, and writes the mean and the median. They
+differ where a few events are far slower than the rest: the mean is the average
+CPU time per execution that Athena's PerfMon reports, the median is the typical
+event. `scripts/compare/compare_timing.py` divides two summaries into
 a speedup.
 
 ## When there is a GPU
