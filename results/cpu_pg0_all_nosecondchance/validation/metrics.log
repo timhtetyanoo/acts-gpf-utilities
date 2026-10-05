@@ -1,0 +1,38 @@
+      threshold  efficiency  fake rate  duplicates
+            0.1      0.9952     0.0683       0.170
+            0.2      0.9952     0.0685       0.145
+            0.3      0.9950     0.0687       0.117
+            0.4      0.9925     0.0708       0.079
+            0.5      0.9783     0.0813       0.041
+            0.6      0.9487     0.1031       0.016
+            0.7      0.8791     0.1645       0.004
+            0.8      0.6849     0.3449       0.001
+            0.9      0.4040     0.6061       0.000
+            1.0      0.0000     1.0000       0.000
+
+sample                     PG0
+implementation             cpu_pg0_all_nosecondchance
+station_eff_thr            0.5
+bending_eff_thr            0.5
+events                     50673
+truth_muons                84629
+truth_muons_all            100550
+patterns                   117192
+efficiency                 0.9783407578962294
+mean_completeness          0.8559648954873756
+mean_purity                0.9542594516624295
+mean_mismatched            0.0
+mean_selectivity           0.6826810567881746
+median_meanSqPull          5.594119043815907
+fake_rate                  0.08134422507726997
+fake_fraction              0.2132910096252304
+patterns_per_event         2.312710911136108
+unmatched_per_event        0.4146784283543504
+unmatched_fraction         0.1793040480578879
+duplicates_per_found_muon  0.0410527078602831
+dEta_mean                  0.0004883678195119627
+dEta_std                   0.01243285848854355
+dPhi_mean                  7.644592848541597e-05
+dPhi_std                   0.015352211246379562
+
+/home/hoo/cern/acts-gpf-utilities/results/cpu_pg0_all_nosecondchance/validation/scores.csv

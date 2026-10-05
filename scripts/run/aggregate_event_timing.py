@@ -14,8 +14,8 @@ tables are written. `events.csv` holds every event of every repetition with the
 name of the run, for plotting the cost against the occupancy. `summary.csv`
 holds one row per repetition:
 
-    run, repetition, events, mean time (us), median time (us), p90 time (us),
-    max time (us),
+    run, repetition, events, mean time (us), throughput (events/s),
+    median time (us), p90 time (us), max time (us),
     median time per space point (us), empty events, ...
 
 Both the mean and the median are written. They answer different questions and
@@ -82,6 +82,9 @@ def main() -> int:
             out[f"{name} median time (us)"] = group[phase].median()
             out[f"{name} p90 time (us)"] = group[phase].quantile(0.9)
         out["mean time (us)"] = group["totalTime_us"].mean()
+        # events handled per second of finder time, one event after the other: the
+        # inverse of the mean time, so the slowest events weigh as they do in the mean
+        out["throughput (events/s)"] = len(group) / (group["totalTime_us"].sum() / 1e6)
         out["median time (us)"] = group["totalTime_us"].median()
         out["p90 time (us)"] = group["totalTime_us"].quantile(0.9)
         out["max time (us)"] = group["totalTime_us"].max()

@@ -21,6 +21,8 @@
 # reusing an old timing would report numbers of a different build or load, and
 # the validation of old patterns would no longer belong to them.
 #
+# The analysis of the timing is scripts/run/analyze_timing.sh, which can be run alone.
+#
 # Writes into results/<name>/:
 #   run_info.txt             what was run: settings, ACTS revision, date
 #   patterns.root            the patterns, the input of step 2
@@ -138,10 +140,7 @@ done
 
 echo
 echo "Collecting"
-"${python}" "${script_dir}/aggregate_event_timing.py" \
-  "${run_dir}/timing/repetitions" --name "${name}" --output-dir "${run_dir}/timing"
-"${python}" "${script_dir}/plot_event_timing.py" \
-  "${run_dir}/timing/events.csv" --output "${run_dir}/timing/event_timing.png"
+"${script_dir}/analyze_timing.sh"
 echo "finished:      $(date '+%F %T')" >>"${run_dir}/run_info.txt"
 
 echo

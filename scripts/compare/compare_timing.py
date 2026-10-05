@@ -6,8 +6,9 @@ reduces each to its median over the repetitions, giving one row:
 
     mean time, <reference> (ms) | mean time, <compare> (ms) | mean time speedup | ...
 
-The speedup is the reference divided by the compared value, so a number above
-one means the compared run is faster.
+The speedup is the reference divided by the compared value for a time and the
+compared divided by the reference for a throughput, so a number above one always
+means the compared run is faster.
 
 The two summaries are taken as they are; the labels are given on the command
 line.
@@ -21,12 +22,14 @@ from pathlib import Path
 
 import pandas as pd
 
-#: Columns compared, as source column -> (name in the output, scale, unit)
+#: Columns compared, as source column -> (name in the output, scale, unit, higher
+#: is better). A time is better when it is smaller, a throughput when it is larger
 COLUMNS = {
-    "mean time (us)": ("mean time", 1e-3, "ms"),
-    "median time (us)": ("median time", 1e-3, "ms"),
-    "p90 time (us)": ("p90 time", 1e-3, "ms"),
-    "median time per space point (us)": ("time per space point", 1.0, "us"),
+    "mean time (us)": ("mean time", 1e-3, "ms", False),
+    "median time (us)": ("median time", 1e-3, "ms", False),
+    "p90 time (us)": ("p90 time", 1e-3, "ms", False),
+    "median time per space point (us)": ("time per space point", 1.0, "us", False),
+    "throughput (events/s)": ("throughput", 1.0, "events/s", True),
 }
 
 
@@ -53,10 +56,13 @@ def main() -> int:
     compared = per_run(args.compared)
 
     row = {}
-    for column, (name, scale, unit) in COLUMNS.items():
+    for column, (name, scale, unit, higher_is_better) in COLUMNS.items():
         row[f"{name}, {args.reference_label} ({unit})"] = reference[column] * scale
         row[f"{name}, {args.compare_label} ({unit})"] = compared[column] * scale
-        row[f"{name} speedup"] = reference[column] / compared[column]
+        # above one always means the compared run is better
+        row[f"{name} speedup"] = (compared[column] / reference[column]
+                                  if higher_is_better
+                                  else reference[column] / compared[column])
     out = pd.DataFrame([row])
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

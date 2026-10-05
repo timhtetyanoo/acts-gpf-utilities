@@ -35,4 +35,4 @@ dEta_std                   0.012283299917695438
 dPhi_mean                  7.959163080055039e-05
 dPhi_std                   0.015360665250062475
 
-results/cpu_pg0_all/validation/scores.csv
+/home/hoo/cern/acts-gpf-utilities/results/cpu_pg0_all/validation/scores.csv

@@ -24,7 +24,13 @@ the sample is merely denser.
 each because it pays for cold caches, and writes the mean and the median. They
 differ where a few events are far slower than the rest: the mean is the average
 CPU time per execution that Athena's PerfMon reports, the median is the typical
-event. `scripts/compare/compare_timing.py` divides two summaries into
+event.
+The summary also carries the throughput, `throughput (events/s)`: the events of a
+repetition divided by the summed time of the finder calls. It is the inverse of
+the mean time, counts one event after the other and leaves out reading, writing
+and start-up, so it is a figure for the finder and not for the whole job. A
+throughput of a parallel implementation, with many events in flight, is not this
+number. `scripts/compare/compare_timing.py` divides two summaries into
 a speedup.
 
 ## When there is a GPU
