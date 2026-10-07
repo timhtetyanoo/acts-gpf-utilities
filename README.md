@@ -65,10 +65,15 @@ own copy:
 ```text
 data/ParticleGun_MU0.root
 data/ParticleGun_MU200.root
-data/ActsTrackingGeometry.json
+data/ActsTrackingGeometry_PG0.json
+data/ActsTrackingGeometry_PG200.json
 ```
 
-`GPF_DATA_DIR` points the scripts elsewhere.
+Each sample was exported with its own detector geometry, and the geometry of
+one sample misses surfaces of the other's hits. A run therefore names both of
+its input files, `GPF_NTUPLE` and `GPF_GEOMETRY` (or `--ntuple` and
+`--geometry`); the runner takes nothing from the sample name. `GPF_SAMPLE` is
+only the label the tables and the plots show.
 
 ## Runs, settings and results
 
@@ -80,6 +85,8 @@ says what it is: `cpu_pg0_all`, `cuda_pg200_500ev`. A config file holds one run:
 # configs/cpu_pg0_all.conf
 GPF_NAME=cpu_pg0_all
 GPF_SAMPLE=PG0
+GPF_NTUPLE="$HOME/cern/acts-gpf-utilities/data/ParticleGun_MU0.root"
+GPF_GEOMETRY="$HOME/cern/acts-gpf-utilities/data/ActsTrackingGeometry_PG0.json"
 GPF_EVENTS=all
 GPF_REPETITIONS=3
 ACTS_BUILD_DIR="$HOME/cern/acts/build"

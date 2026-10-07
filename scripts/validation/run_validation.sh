@@ -25,7 +25,6 @@
 #   GPF_NAME          name of the run                  (required)
 #   GPF_SAMPLE        sample                           (default: from run_info.txt)
 #   GPF_NTUPLE        n-tuple                          (default: from run_info.txt)
-#   GPF_DATA_DIR      n-tuples, when the sample is given (default: <this repo>/data)
 #   GPF_RESULTS_DIR   where the runs are kept          (default: <this repo>/results)
 #   GPF_STATION_EFF_THR   a match crosses more than this fraction of the muon's
 #                         stations                     (default: 0.5)
@@ -45,22 +44,19 @@ name="${GPF_NAME:-}"
 run_dir="$(gpf_run_dir "${repo_root}")"
 out_dir="${run_dir}/validation"
 patterns="${run_dir}/patterns.root"
-data_dir="${GPF_DATA_DIR:-${repo_root}/data}"
 python="$(gpf_python)"
 
 # @brief A value of run_info.txt
 info() { sed -n "s/^$1: *//p" "${run_dir}/run_info.txt" 2>/dev/null | head -n 1; }
 
+# The n-tuple the patterns were found in, as the run recorded it
+ntuple="${GPF_NTUPLE:-$(info ntuple)}"
 sample="${GPF_SAMPLE:-$(info sample)}"
-sample="${sample:-PG0}"
-if [[ -n "${GPF_NTUPLE:-}" ]]; then
-  ntuple="${GPF_NTUPLE}"
-elif [[ -n "${GPF_SAMPLE:-}" ]]; then
-  ntuple="$(gpf_ntuple_for "${data_dir}" "${sample}")"
-else
-  ntuple="$(info ntuple)"
-  ntuple="${ntuple:-$(gpf_ntuple_for "${data_dir}" "${sample}")}"
+if [[ -z "${ntuple}" ]]; then
+  echo "No n-tuple for ${name}: run_info.txt does not name one; give --ntuple." >&2
+  exit 1
 fi
+sample="${sample:-$(basename -- "${ntuple}" .root)}"
 
 # --- the inputs have to be there -------------------------------------------
 if [[ ! -f "${patterns}" ]]; then

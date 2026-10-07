@@ -1,21 +1,5 @@
 # Shared helpers for the runners: settings, the python interpreter, the n-tuples.
 
-# @brief n-tuple of a sample, honouring GPF_<SAMPLE>_NTUPLE
-# @param $1 data directory
-# @param $2 sample name (PG0, PG200, ...)
-gpf_ntuple_for() {
-  local data_dir="$1"
-  local sample="$2"
-  local override="GPF_${sample}_NTUPLE"
-  local fallback
-  case "${sample}" in
-    PG0) fallback="${data_dir}/ParticleGun_MU0.root" ;;
-    PG200) fallback="${data_dir}/ParticleGun_MU200.root" ;;
-    *) fallback="${data_dir}/${sample}.root" ;;
-  esac
-  printf '%s' "${!override:-${fallback}}"
-}
-
 # @brief Settings from flags and from a config file, for the runners
 #
 # A run has a name, and everything it produces goes into results/<name>/. The
@@ -37,13 +21,14 @@ gpf_ntuple_for() {
 # Flags (a script ignores the ones that mean nothing to it):
 #   --config FILE            file of settings
 #   --name NAME              name of the run, its folder in results/   GPF_NAME
-#   --sample NAME            sample: PG0, PG200 or a n-tuple name      GPF_SAMPLE
-#   --ntuple FILE            n-tuple, instead of the one of the sample GPF_NTUPLE
+#   --sample NAME            label of the input, e.g. PG0, PG200       GPF_SAMPLE
+#   --ntuple FILE            space point n-tuple                       GPF_NTUPLE
 #   --events N|all           events per repetition                     GPF_EVENTS
 #   --repetitions N          timing repetitions                        GPF_REPETITIONS
+#   --backend cpu|cuda       where the finder runs                     GPF_BACKEND
+#   --batch-size N           seeds built at once on the GPU            GPF_BATCH_SIZE
 #   --build-dir DIR          ACTS build directory                      ACTS_BUILD_DIR
 #   --source-dir DIR         ACTS source tree                          ACTS_SOURCE_DIR
-#   --data-dir DIR           n-tuples & geometry                       GPF_DATA_DIR
 #   --geometry FILE          tracking geometry json                    GPF_GEOMETRY
 #   --results-dir DIR        where the runs are kept                   GPF_RESULTS_DIR
 #   --station-eff-thr X      a match crosses more than this fraction of the
@@ -66,9 +51,10 @@ gpf_parse_args() {
       --ntuple) flags[GPF_NTUPLE]="${2:?}"; shift ;;
       --events) flags[GPF_EVENTS]="${2:?--events needs a number or 'all'}"; shift ;;
       --repetitions) flags[GPF_REPETITIONS]="${2:?}"; shift ;;
+      --backend) flags[GPF_BACKEND]="${2:?--backend needs cpu or cuda}"; shift ;;
+      --batch-size) flags[GPF_BATCH_SIZE]="${2:?}"; shift ;;
       --build-dir) flags[ACTS_BUILD_DIR]="${2?}"; shift ;;
       --source-dir) flags[ACTS_SOURCE_DIR]="${2:?}"; shift ;;
-      --data-dir) flags[GPF_DATA_DIR]="${2:?}"; shift ;;
       --geometry) flags[GPF_GEOMETRY]="${2:?}"; shift ;;
       --results-dir) flags[GPF_RESULTS_DIR]="${2:?}"; shift ;;
       --station-eff-thr) flags[GPF_STATION_EFF_THR]="${2:?}"; shift ;;
