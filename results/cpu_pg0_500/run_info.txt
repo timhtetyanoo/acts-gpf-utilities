@@ -1,16 +1,16 @@
-name:          cpu_pg0_all
+name:          cpu_pg0_500
 sample:        PG0
 ntuple:        /home/hoo/cern/acts-gpf-utilities/data/ParticleGun_MU0.root
 geometry:      /home/hoo/cern/acts-gpf-utilities/data/ActsTrackingGeometry_PG0.json
-events:        all
+events:        500
 repetitions:   3
 backend:       cpu
 build:         /home/hoo/cern/acts/build
 executable:    /home/hoo/cern/acts/build/bin/ActsUnitTestGlobalPatternFinderData (2026-10-07 19:06:46)
 acts branch:   cuda-glob-pat-finder
 acts revision: eb06e9bb9
-utilities rev: b407665
+utilities rev: d959092
 host:          at-tdaq-mldev02
 gpu:           NVIDIA RTX 5000 Ada Generation
-started:       2026-10-07 20:11:47
-finished:      2026-10-07 21:16:00
+started:       2026-10-07 19:11:36
+finished:      2026-10-07 19:12:19

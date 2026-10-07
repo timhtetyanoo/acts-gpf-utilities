@@ -1,0 +1,38 @@
+      threshold  efficiency  fake rate  duplicates
+            0.1      0.9938     0.3951       0.290
+            0.2      0.9938     0.3951       0.245
+            0.3      0.9926     0.3964       0.188
+            0.4      0.9865     0.3987       0.137
+            0.5      0.9729     0.4059       0.081
+            0.6      0.9348     0.4266       0.032
+            0.7      0.8413     0.4831       0.015
+            0.8      0.6507     0.6021       0.002
+            0.9      0.3592     0.7749       0.000
+            1.0      0.0000     1.0000       0.000
+
+sample                     PG200
+implementation             cpu_pg200_500
+station_eff_thr            0.5
+bending_eff_thr            0.5
+events                     498
+truth_muons                813
+truth_muons_all            985
+patterns                   1987
+efficiency                 0.972939729397294
+mean_completeness          0.8384864712524132
+mean_purity                0.9496277829198106
+mean_mismatched            0.0
+mean_selectivity           0.4250539516172125
+median_meanSqPull          6.678231380165423
+fake_rate                  0.405915415386749
+fake_fraction              0.5546049320583795
+patterns_per_event         3.9899598393574296
+unmatched_per_event        2.0602409638554215
+unmatched_fraction         0.5163563160543533
+duplicates_per_found_muon  0.08091024020227561
+dEta_mean                  -0.0002585118044329516
+dEta_std                   0.012132406147972542
+dPhi_mean                  2.9156742103553264e-05
+dPhi_std                   0.01431010354616337
+
+/home/hoo/cern/acts-gpf-utilities/results/cpu_pg200_500/validation/scores.csv

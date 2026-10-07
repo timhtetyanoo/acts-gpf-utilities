@@ -1,0 +1,15 @@
+name:          cuda_pg0_all
+sample:        PG0
+ntuple:        /home/hoo/cern/acts-gpf-utilities/data/ParticleGun_MU0.root
+events:        all
+repetitions:   3
+backend:       cuda
+batch size:    default
+build:         /home/hoo/cern/acts/build_cuda
+executable:    /home/hoo/cern/acts/build_cuda/bin/ActsUnitTestCudaGlobalPatternFinderData (2026-10-07 15:12:08)
+acts branch:   cuda-glob-pat-finder
+acts revision: 6a51d024c (+ local changes)
+utilities rev: d959092
+host:          at-tdaq-mldev02
+gpu:           NVIDIA RTX 5000 Ada Generation
+started:       2026-10-07 15:22:21

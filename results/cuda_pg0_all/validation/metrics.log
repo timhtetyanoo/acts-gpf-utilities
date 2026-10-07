@@ -1,0 +1,38 @@
+      threshold  efficiency  fake rate  duplicates
+            0.1      0.9951     0.0709       0.182
+            0.2      0.9951     0.0710       0.155
+            0.3      0.9949     0.0712       0.126
+            0.4      0.9932     0.0726       0.087
+            0.5      0.9825     0.0803       0.046
+            0.6      0.9568     0.0987       0.018
+            0.7      0.8909     0.1561       0.004
+            0.8      0.6995     0.3332       0.001
+            0.9      0.4161     0.5964       0.000
+            1.0      0.0000     1.0000       0.000
+
+sample                     PG0
+implementation             cuda_pg0_all
+station_eff_thr            0.5
+bending_eff_thr            0.5
+events                     50672
+truth_muons                84629
+truth_muons_all            100550
+patterns                   118916
+efficiency                 0.9825119049025748
+mean_completeness          0.8595049182811785
+mean_purity                0.9523027204173766
+mean_mismatched            0.0
+mean_selectivity           0.68222835873399
+median_meanSqPull          5.735737420692084
+fake_rate                  0.08029658803906077
+fake_fraction              0.22120656597934676
+patterns_per_event         2.3467792863909063
+unmatched_per_event        0.42931007262393434
+unmatched_fraction         0.1829358538800498
+duplicates_per_found_muon  0.04636255396938027
+dEta_mean                  -9.6716047435448e-05
+dEta_std                   0.012288385733353979
+dPhi_mean                  8.752823966753711e-05
+dPhi_std                   0.015383788614984897
+
+/home/hoo/cern/acts-gpf-utilities/results/cuda_pg0_all/validation/scores.csv
