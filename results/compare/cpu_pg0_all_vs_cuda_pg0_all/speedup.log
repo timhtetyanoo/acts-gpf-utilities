@@ -1,4 +1,0 @@
- mean time, cpu_pg0_all (ms)  mean time, cuda_pg0_all (ms)  mean time speedup  median time, cpu_pg0_all (ms)  median time, cuda_pg0_all (ms)  median time speedup  p90 time, cpu_pg0_all (ms)  p90 time, cuda_pg0_all (ms)  p90 time speedup  time per space point, cpu_pg0_all (us)  time per space point, cuda_pg0_all (us)  time per space point speedup  throughput, cpu_pg0_all (events/s)  throughput, cuda_pg0_all (events/s)  throughput speedup
-                    24.67859                    142.601934           0.173059                          0.547                          24.663             0.022179                      1.4882                      64.7514          0.022983                                6.432836                               285.689259                      0.022517                           40.520953                             7.012528            0.173059
-
-Speedup is cpu_pg0_all over cuda_pg0_all; above one means cuda_pg0_all is faster
