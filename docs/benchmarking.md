@@ -17,7 +17,7 @@ cover the algorithm alone. `steady_clock` is monotonic, so a change of the
 system time leaves the durations intact.
 
 The hit counts share the row because they separate a busier event from a slower
-one: `median time per space point (us)` is flat when the cost per unit of work is unchanged and
+one: `median time per space point (ms)` is flat when the cost per unit of work is unchanged and
 the sample is merely denser.
 
 `aggregate_event_timing.py` summarises the runs, dropping the first event of

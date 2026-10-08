@@ -1,0 +1,80 @@
+500 events, 191134 seeds, 48098 of them built
+
+=== all: 500 events, 3319.8 ms in total, mean 6.64 ms, median 6.53 ms per event
+                stage  total (ms)  share (%)  mean per event (ms)
+         hit payloads     769.195     23.170                1.538
+          search tree    1320.684     39.782                2.641
+            skip rule       8.701      0.262                0.017
+        second chance       8.165      0.246                0.016
+        window search      66.620      2.007                0.133
+          seed checks      97.445      2.935                0.195
+    forward extension     165.877      4.997                0.332
+   backward extension     638.889     19.245                1.278
+overlaps after a pass      29.999      0.904                0.060
+   overlaps in a seed       2.382      0.072                0.005
+         pattern cuts       2.782      0.084                0.006
+rest of the seed loop      77.450      2.333                0.155
+       final overlaps       0.893      0.027                0.002
+        phi-only hits       3.470      0.105                0.007
+           conversion       1.548      0.047                0.003
+                 rest     125.722      3.787                0.251
+
+  independent per seed    30.2 % of the time
+  in seed order            0.5 % (skip rule, second chance, final overlaps)
+  everything else         69.8 %: with the per-seed work made free, the event is at most 1.4x faster
+  over seeds             work / longest seed: 17.3x time-weighted, median event 23.5x; the longest seed holds 4 % of an event's seed work (median)
+  in a seed              steps in order: 1.7x fewer as layers than as hits; pattern-hit tests per layer step: 3.9 on average, 4.7 for the median of extension time; widest beam 316, median seed 2
+  overlap pairs          after a pass 76137, in a seed 12674, second chance 55775 in 2688 calls, final 8885
+
+=== bulk (to p99): 495 events, 3192.1 ms in total, mean 6.45 ms, median 6.52 ms per event
+                stage  total (ms)  share (%)  mean per event (ms)
+         hit payloads     760.905     23.837                1.537
+          search tree    1307.446     40.959                2.641
+            skip rule       8.464      0.265                0.017
+        second chance       6.682      0.209                0.013
+        window search      65.541      2.053                0.132
+          seed checks      93.230      2.921                0.188
+    forward extension     157.069      4.921                0.317
+   backward extension     554.173     17.361                1.120
+overlaps after a pass      28.654      0.898                0.058
+   overlaps in a seed       2.218      0.069                0.004
+         pattern cuts       2.698      0.085                0.005
+rest of the seed loop      76.628      2.401                0.155
+       final overlaps       0.799      0.025                0.002
+        phi-only hits       3.073      0.096                0.006
+           conversion       1.510      0.047                0.003
+                 rest     123.023      3.854                0.249
+
+  independent per seed    28.3 % of the time
+  in seed order            0.5 % (skip rule, second chance, final overlaps)
+  everything else         71.7 %: with the per-seed work made free, the event is at most 1.4x faster
+  over seeds             work / longest seed: 19.4x time-weighted, median event 23.6x; the longest seed holds 4 % of an event's seed work (median)
+  in a seed              steps in order: 1.7x fewer as layers than as hits; pattern-hit tests per layer step: 3.4 on average, 4.0 for the median of extension time; widest beam 216, median seed 2
+  overlap pairs          after a pass 71864, in a seed 12173, second chance 41519 in 2619 calls, final 7510
+
+=== tail (above p99): 5 events, 127.7 ms in total, mean 25.54 ms, median 21.07 ms per event
+                stage  total (ms)  share (%)  mean per event (ms)
+         hit payloads       8.289      6.491                1.658
+          search tree      13.239     10.366                2.648
+            skip rule       0.237      0.186                0.047
+        second chance       1.483      1.161                0.297
+        window search       1.079      0.845                0.216
+          seed checks       4.215      3.301                0.843
+    forward extension       8.808      6.897                1.762
+   backward extension      84.715     66.335               16.943
+overlaps after a pass       1.344      1.053                0.269
+   overlaps in a seed       0.164      0.128                0.033
+         pattern cuts       0.085      0.066                0.017
+rest of the seed loop       0.823      0.644                0.165
+       final overlaps       0.094      0.073                0.019
+        phi-only hits       0.397      0.311                0.079
+           conversion       0.038      0.029                0.008
+                 rest       2.698      2.113                0.540
+
+  independent per seed    78.6 % of the time
+  in seed order            1.4 % (skip rule, second chance, final overlaps)
+  everything else         21.4 %: with the per-seed work made free, the event is at most 4.7x faster
+  over seeds             work / longest seed: 8.7x time-weighted, median event 13.2x; the longest seed holds 8 % of an event's seed work (median)
+  in a seed              steps in order: 3.3x fewer as layers than as hits; pattern-hit tests per layer step: 24.8 on average, 241.3 for the median of extension time; widest beam 316, median seed 4
+  overlap pairs          after a pass 4273, in a seed 501, second chance 14256 in 69 calls, final 1375
+

@@ -1,0 +1,2 @@
+run,repetition,events,mean time (ms),throughput (events/s),median time (ms),p90 time (ms),max time (ms),median space points,median time per space point (ms),empty events,median patterns
+prof_pg200_500,r01,499.0,6.638605210420842,150.63405162733076,6.5280000000000005,8.364799999999999,46.512,6360.0,0.0010099429502852487,0.0,3.0

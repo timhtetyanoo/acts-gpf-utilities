@@ -36,6 +36,8 @@
 #   timing/event_timing.png  cost against occupancy
 #   timing/repetitions/      the raw csv of each repetition
 #   logs/                    finder output of each repetition
+#   profile/                 with GPF_PROFILE: seeds.csv, events.csv and their
+#                            analysis, of the first repetition
 #
 # Settings (flags are listed in scripts/gpf_common.sh):
 #   GPF_NAME          name of the run                  (required)
@@ -44,6 +46,10 @@
 #   GPF_SAMPLE        label of the input, e.g. PG0     (default: the n-tuple's file name)
 #   GPF_EVENTS        events per repetition            (a number or "all", default: 500)
 #   GPF_REPETITIONS   timing repetitions               (default: 3)
+#   GPF_FIRST_EVENT   events skipped before the first (default: 0)
+#   GPF_PROFILE       1: the stages of the CPU finder into profile/, read by
+#                     scripts/profile/analyze_profile.py. Needs the profiling
+#                     build, -DACTS_GPF_PROFILE on the gpf-profiling branch
 #   GPF_BACKEND       cpu or cuda                      (default: cpu)
 #   GPF_BATCH_SIZE    seeds built at once on the GPU   (default: the algorithm's)
 #   ACTS_SOURCE_DIR   ACTS source tree                 (default: <this repo>/../acts)
@@ -112,6 +118,8 @@ mkdir -p -- "${run_dir}/timing/repetitions" "${run_dir}/logs"
   echo "geometry:      ${geometry}"
   echo "events:        ${events}"
   echo "repetitions:   ${repetitions}"
+  echo "first event:   ${GPF_FIRST_EVENT:-0}"
+  [[ -n "${GPF_PROFILE:-}" ]] && echo "profile:       yes"
   echo "backend:       ${backend}"
   [[ "${backend}" == cuda ]] && echo "batch size:    ${GPF_BATCH_SIZE:-default}"
   echo "build:         ${build_dir}"
@@ -132,7 +140,9 @@ run_cpp() {
   local timing="${run_dir}/timing/repetitions/timing_${tag}.csv"
   local log="${run_dir}/logs/${tag}.log"
   local output=""
+  local profile=""
   ((repetition == 1)) && output="${run_dir}/patterns.root"
+  ((repetition == 1)) && [[ -n "${GPF_PROFILE:-}" ]] && profile="${run_dir}/profile"
 
   echo "Running ${name} ${tag}"
   ACTS_GPF_NTUPLE="${ntuple}" \
@@ -142,6 +152,8 @@ run_cpp() {
   ACTS_GPF_OUTPUT="${output}" \
   ACTS_GPF_LOG_LEVEL=WARNING \
   ACTS_GPF_BATCH_SIZE="${GPF_BATCH_SIZE:-}" \
+  ACTS_GPF_FIRST_EVENT="${GPF_FIRST_EVENT:-}" \
+  ACTS_GPF_PROFILE_DIR="${profile}" \
     "${executable}" --log_level=error --report_level=no --color_output=no \
     >"${log}" 2>&1 || {
     echo "The finder failed in ${tag}; the end of ${log}:" >&2
@@ -156,6 +168,10 @@ run_cpp() {
     echo "No pattern file was written, see ${log}" >&2
     exit 1
   fi
+  if [[ -n "${profile}" && ! -f "${profile}/seeds.csv" ]]; then
+    echo "No profile was written: ${executable} is not a profiling build" >&2
+    exit 1
+  fi
 }
 
 for repetition in $(seq 1 "${repetitions}"); do
@@ -165,6 +181,9 @@ done
 echo
 echo "Collecting"
 "${script_dir}/analyze_timing.sh"
+if [[ -n "${GPF_PROFILE:-}" ]]; then
+  "${python}" "${script_dir}/../profile/analyze_profile.py" "${run_dir}/profile"
+fi
 echo "finished:      $(date '+%F %T')" >>"${run_dir}/run_info.txt"
 
 echo

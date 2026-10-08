@@ -17,6 +17,9 @@ __pycache__/
 !/results/**/timing/summary.csv
 !/results/**/timing/event_timing.png
 !/results/**/hough/**/*.pdf
+!/results/**/profile/report.txt
+!/results/**/profile/stages.csv
+!/results/**/profile/*.png
 # a comparison of two runs
 !/results/compare/**/patterns.log
 !/results/compare/**/scores.csv

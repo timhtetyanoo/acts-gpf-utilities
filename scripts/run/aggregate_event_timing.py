@@ -14,9 +14,12 @@ tables are written. `events.csv` holds every event of every repetition with the
 name of the run, for plotting the cost against the occupancy. `summary.csv`
 holds one row per repetition:
 
-    run, repetition, events, mean time (us), throughput (events/s),
-    median time (us), p90 time (us), max time (us),
-    median time per space point (us), empty events, ...
+    run, repetition, events, mean time (ms), throughput (events/s),
+    median time (ms), p90 time (ms), max time (ms),
+    median time per space point (ms), empty events, ...
+
+The times of the summary are in milliseconds, for reading; the raw files and
+events.csv keep the microseconds of the timing binaries.
 
 Both the mean and the median are written. They answer different questions and
 differ a lot where a few events are far slower than the rest: the mean is the
@@ -75,25 +78,27 @@ def main() -> int:
     phases = [c for c in events.columns
               if c.endswith("Time_us") and c != "totalTime_us"]
 
+    ms = 1e-3  # microseconds of the raw files to milliseconds
+
     def describe(group: pd.DataFrame) -> pd.Series:
         out = {"events": len(group)}
         for phase in phases:
             name = phase.removesuffix("Time_us")
-            out[f"{name} median time (us)"] = group[phase].median()
-            out[f"{name} p90 time (us)"] = group[phase].quantile(0.9)
-        out["mean time (us)"] = group["totalTime_us"].mean()
+            out[f"{name} median time (ms)"] = group[phase].median() * ms
+            out[f"{name} p90 time (ms)"] = group[phase].quantile(0.9) * ms
+        out["mean time (ms)"] = group["totalTime_us"].mean() * ms
         # events handled per second of finder time, one event after the other: the
         # inverse of the mean time, so the slowest events weigh as they do in the mean
         out["throughput (events/s)"] = len(group) / (group["totalTime_us"].sum() / 1e6)
-        out["median time (us)"] = group["totalTime_us"].median()
-        out["p90 time (us)"] = group["totalTime_us"].quantile(0.9)
-        out["max time (us)"] = group["totalTime_us"].max()
+        out["median time (ms)"] = group["totalTime_us"].median() * ms
+        out["p90 time (ms)"] = group["totalTime_us"].quantile(0.9) * ms
+        out["max time (ms)"] = group["totalTime_us"].max() * ms
         out["median space points"] = group["nSpacePoints"].median()
         # an event without space points has no cost to attribute to one, so it
         # is left out of this column only and counted beside it
         occupied = group[group["nSpacePoints"] > 0]
-        out["median time per space point (us)"] = (
-            (occupied["totalTime_us"] / occupied["nSpacePoints"]).median()
+        out["median time per space point (ms)"] = (
+            (occupied["totalTime_us"] / occupied["nSpacePoints"]).median() * ms
             if len(occupied) else float("nan"))
         out["empty events"] = len(group) - len(occupied)
         out["median patterns"] = group["nPatterns"].median()

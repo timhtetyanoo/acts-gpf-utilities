@@ -22,20 +22,25 @@ from pathlib import Path
 
 import pandas as pd
 
-#: Columns compared, as source column -> (name in the output, scale, unit, higher
-#: is better). A time is better when it is smaller, a throughput when it is larger
+#: Columns compared, as source column -> (name in the output, unit, higher is
+#: better). A time is better when it is smaller, a throughput when it is larger
 COLUMNS = {
-    "mean time (us)": ("mean time", 1e-3, "ms", False),
-    "median time (us)": ("median time", 1e-3, "ms", False),
-    "p90 time (us)": ("p90 time", 1e-3, "ms", False),
-    "median time per space point (us)": ("time per space point", 1.0, "us", False),
-    "throughput (events/s)": ("throughput", 1.0, "events/s", True),
+    "mean time (ms)": ("mean time", "ms", False),
+    "median time (ms)": ("median time", "ms", False),
+    "p90 time (ms)": ("p90 time", "ms", False),
+    "median time per space point (ms)": ("time per space point", "ms", False),
+    "throughput (events/s)": ("throughput", "events/s", True),
 }
 
 
 def per_run(path: Path) -> pd.Series:
-    """The median over the repetitions the summary holds."""
+    """The median over the repetitions the summary holds. A summary written
+    before the times were in milliseconds has them in microseconds"""
     frame = pd.read_csv(path)
+    for column in COLUMNS:
+        old = column.replace("(ms)", "(us)")
+        if column not in frame.columns and old in frame.columns:
+            frame[column] = frame[old] * 1e-3
     missing = [c for c in COLUMNS if c not in frame.columns]
     if missing:
         raise SystemExit(f"{path} has no column {missing[0]}")
@@ -56,9 +61,9 @@ def main() -> int:
     compared = per_run(args.compared)
 
     row = {}
-    for column, (name, scale, unit, higher_is_better) in COLUMNS.items():
-        row[f"{name}, {args.reference_label} ({unit})"] = reference[column] * scale
-        row[f"{name}, {args.compare_label} ({unit})"] = compared[column] * scale
+    for column, (name, unit, higher_is_better) in COLUMNS.items():
+        row[f"{name}, {args.reference_label} ({unit})"] = reference[column]
+        row[f"{name}, {args.compare_label} ({unit})"] = compared[column]
         # above one always means the compared run is better
         row[f"{name} speedup"] = (compared[column] / reference[column]
                                   if higher_is_better
