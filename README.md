@@ -36,6 +36,7 @@ scripts/
     run_compare.sh                     compare two runs and two validations
     compare_timing.py                  two timing summaries -> speedup table
 configs/                               one config per run: its name, sample and build
+  cpu/  cuda/  profile/                CPU runs, GPU runs (cuda: version 1, cuda_v2: version 2), CPU profiles
 results/                               everything the scripts write; only the small summaries are tracked
 docs/
   acts_changes.md                      what this work changed in the ACTS checkout
@@ -82,7 +83,7 @@ The name is the only thing that tells two runs apart, so give each run one that
 says what it is: `cpu_pg0_all`, `cuda_pg200_500ev`. A config file holds one run:
 
 ```bash
-# configs/cpu_pg0_all.conf
+# configs/cpu/cpu_pg0_all.conf
 GPF_NAME=cpu_pg0_all
 GPF_SAMPLE=PG0
 GPF_NTUPLE="$HOME/cern/acts-gpf-utilities/data/ParticleGun_MU0.root"
@@ -102,8 +103,8 @@ flag  >  config file  >  environment variable  >  the script's default
 so a config can be bent for one run from the command line:
 
 ```bash
-scripts/run/run_finder.sh --config configs/cpu_pg0_all.conf
-scripts/run/run_finder.sh --config configs/cpu_pg0_all.conf --name cpu_pg0_quick --events 100
+scripts/run/run_finder.sh --config configs/cpu/cpu_pg0_all.conf
+scripts/run/run_finder.sh --config configs/cpu/cpu_pg0_all.conf --name cpu_pg0_quick --events 100
 scripts/validation/run_validation.sh --name cpu_pg0_quick
 ```
 
@@ -163,7 +164,7 @@ new patterns.
 
 ```bash
 source ~/cern/env_setup.sh
-scripts/run/run_finder.sh --config configs/cpu_pg0_all.conf
+scripts/run/run_finder.sh --config configs/cpu/cpu_pg0_all.conf
 ```
 
 Runs `bin/ActsUnitTestGlobalPatternFinderData` over the sample, once per

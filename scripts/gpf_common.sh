@@ -27,7 +27,7 @@
 #   --first-event N          events skipped before the first one       GPF_FIRST_EVENT
 #   --profile                record the stages (profiling build only)  GPF_PROFILE
 #   --repetitions N          timing repetitions                        GPF_REPETITIONS
-#   --backend cpu|cuda       where the finder runs                     GPF_BACKEND
+#   --backend cpu|cuda|cuda_v2  where the finder runs                  GPF_BACKEND
 #   --batch-size N           seeds built at once on the GPU            GPF_BATCH_SIZE
 #   --build-dir DIR          ACTS build directory                      ACTS_BUILD_DIR
 #   --source-dir DIR         ACTS source tree                          ACTS_SOURCE_DIR
@@ -55,7 +55,7 @@ gpf_parse_args() {
       --first-event) flags[GPF_FIRST_EVENT]="${2:?}"; shift ;;
       --profile) flags[GPF_PROFILE]=1 ;;
       --repetitions) flags[GPF_REPETITIONS]="${2:?}"; shift ;;
-      --backend) flags[GPF_BACKEND]="${2:?--backend needs cpu or cuda}"; shift ;;
+      --backend) flags[GPF_BACKEND]="${2:?--backend needs cpu, cuda or cuda_v2}"; shift ;;
       --batch-size) flags[GPF_BATCH_SIZE]="${2:?}"; shift ;;
       --build-dir) flags[ACTS_BUILD_DIR]="${2?}"; shift ;;
       --source-dir) flags[ACTS_SOURCE_DIR]="${2:?}"; shift ;;
