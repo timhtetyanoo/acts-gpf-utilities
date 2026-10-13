@@ -49,7 +49,7 @@ SP_BRANCHES = [
     "event_id",
     "spacePoint_geometryId", "spacePoint_bucketId", "spacePoint_muonId",
     "spacePoint_localPosX", "spacePoint_localPosY", "spacePoint_localPosZ",
-    "spacePoint_driftRadius", "spacePoint_covLoc0",
+    "spacePoint_driftRadius", "spacePoint_covLoc1",
 ]
 PATTERN_BRANCHES = [
     "event_id",
@@ -181,7 +181,7 @@ def main() -> int:
         sp_position = np.stack([ak.to_numpy(sp_event[f"spacePoint_localPos{a}"])
                                 for a in "XYZ"], axis=1).astype(float)
         sp_drift = ak.to_numpy(sp_event["spacePoint_driftRadius"]).astype(float)
-        sp_variance = ak.to_numpy(sp_event["spacePoint_covLoc0"]).astype(float)
+        sp_variance = ak.to_numpy(sp_event["spacePoint_covLoc1"]).astype(float)
         # category and station of every hit of the event, for the counts taken
         # over a whole bucket
         sp_decoded = gpfval.decode_muon_id(

@@ -1,2 +1,0 @@
-run,repetition,events,mean time (ms),throughput (events/s),median time (ms),p90 time (ms),max time (ms),median space points,median time per space point (ms),empty events,median patterns
-prof_pg0_500,r01,499.0,0.7494989979959921,1334.2245989304813,0.549,1.2171999999999998,11.087,84.0,0.006454545454545454,0.0,2.0

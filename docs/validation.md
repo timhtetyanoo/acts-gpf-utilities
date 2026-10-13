@@ -303,7 +303,7 @@ line, just not the muon's.
 | the truth line | `Segments_localSegPars`, same frame, no transform |
 | which line applies | `Segments_hitGeoIds` |
 | drift radius | `spacePoint_driftRadius` |
-| measurement uncertainty | `spacePoint_covLoc0`, the bending direction |
+| measurement uncertainty | `spacePoint_covLoc1`, the bending direction |
 | is it a tube | technology field of `spacePoint_muonId` |
 
 The pairing of `localSegPars` with `hitGeoIds` was checked against the data: a
@@ -320,13 +320,14 @@ involved.
 - **Hits in a chamber where the muon left no segment cannot be measured at all.**
   They have no line to compare against and are counted separately rather than
   quietly dropped.
-The bending direction is `covLoc0`, established from the data rather than from
-an enum: for an MDT its median is 0.02 mm², the square of the drift resolution,
-while `covLoc1` is 1.8e6 mm², the square of half a tube length — the coordinate
-along the wire, which is not measured. Micromegas and sTGC show the same
-pattern. This agrees with `CovIdx::etaCov = 0` in the example's own definitions;
-the Core's `ResidualIdx::bending = 1` indexes a different array in a different
-event model and must not be applied here.
+The bending direction is `covLoc1`, in the ACTS order of the Core
+(`CompSpacePointAuxiliaries::ResidualIdx`: nonBending = 0, bending = 1) and of
+ACTS's own `RootMuonSpacePointWriter`. For an MDT its median is 0.02 mm², the
+square of the drift resolution, while `covLoc0` is 1.8e6 mm², the square of half
+a tube length — the coordinate along the wire, which is not measured.
+Dumps made before MuonActsDump was fixed have the two exchanged; put them in the
+ACTS order with `scripts/fix_ntuple_covariance.py` first. The n-tuples in
+`data/` are already corrected.
 
 ---
 
