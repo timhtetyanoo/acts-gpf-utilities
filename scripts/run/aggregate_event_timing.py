@@ -1,31 +1,24 @@
 #!/usr/bin/env python3
 """Summarise the per event timing files written by the C++ data test.
 
-The test times each call of the pattern finder on its own and writes
-
-    event,nSpacePoints,nBuckets,nPatterns,totalTime_us
-
-so the cost is available as a distribution rather than as a total. That is what
-the Sequencer cannot give: it reports one number per component for the whole
-run, which this complements rather than repeats.
+The test times each call of the pattern finder on its own and writes one row per
+event, in microseconds, with the GPU test adding the time of each stage and what
+the event held.
 
 A run is repeated several times, one file `timing_rNN.csv` per repetition. Two
-tables are written. `events.csv` holds every event of every repetition with the
-name of the run, for plotting the cost against the occupancy. `summary.csv`
-holds one row per repetition:
+tables are written, with the times in milliseconds and columns that say what
+they hold:
 
-    run, repetition, events, mean time (ms), throughput (events/s),
-    median time (ms), p90 time (ms), max time (ms),
-    median time per space point (ms), empty events, ...
-
-The times of the summary are in milliseconds, for reading; the raw files and
-events.csv keep the microseconds of the timing binaries.
+  events.csv   every event of every repetition, with the name of the run, for
+               plotting the cost against the occupancy
+  summary.csv  one row per repetition: the mean, median, p90 and slowest event,
+               and the median and p90 of each stage of the GPU path
 
 Both the mean and the median are written. They answer different questions and
 differ a lot where a few events are far slower than the rest: the mean is the
 total time over the events, which is what Athena's PerfMon reports as the average
 CPU time per execution, and the median is the typical event. The first event of
-each repetition is left out of both, since it pays for cold caches.
+each repetition is left out of the summary, since it pays for cold caches.
 """
 
 from __future__ import annotations
@@ -68,48 +61,88 @@ def main() -> int:
     events = pd.concat(frames, ignore_index=True)
 
     # the first event of a run carries the cost of filling cold caches
-    events["isFirst"] = events.groupby(
-        ["run", "repetition"])["event"].transform("min") \
+    first = events.groupby(["run", "repetition"])["event"].transform("min") \
         == events["event"]
 
-    # every column of times is summarised, so a run carrying the phases of a
-    # GPU beside the total is handled by the same code; the total is the plain
-    # "median time" below and is not repeated as a phase
-    phases = [c for c in events.columns
-              if c.endswith("Time_us") and c != "totalTime_us"]
-
     ms = 1e-3  # microseconds of the raw files to milliseconds
+    # the stages of the GPU path, as the timing files name them
+    stages = {
+        "treeTime_us": "host: positions and search tree",
+        "fillTime_us": "host: candidate lists",
+        "uploadTime_us": "copy to GPU",
+        "kernelTime_us": "GPU kernels",
+        "downloadTime_us": "copy from GPU",
+        "tailTime_us": "host: phi-only hits and output",
+    }
+    stages = {raw: name for raw, name in stages.items() if raw in events}
+
+    # events.csv: every event, the times in milliseconds
+    table = pd.DataFrame({
+        "run": events["run"],
+        "repetition": events["repetition"],
+        "event": events["event"],
+        "first of the repetition (left out of the summary)": first,
+        "space points": events["nSpacePoints"],
+        "buckets": events["nBuckets"],
+        "patterns": events["nPatterns"],
+        "time (ms)": events["totalTime_us"] * ms,
+    })
+    for raw, name in stages.items():
+        table[f"{name} (ms)"] = events[raw] * ms
+    gpu_columns = {
+        "nSeeds": "seeds",
+        "nCandidates": "candidate hits of all seeds",
+        "nPatternsInEta": "patterns kept on the GPU",
+        "capacityPerSeed": "patterns a seed had room for",
+        "overflow": ("overflow (0 none; +1 a seed's patterns; +2 a pattern's "
+                     "hits; +4 the event's patterns)"),
+    }
+    for raw, name in gpu_columns.items():
+        if raw in events:
+            table[name] = events[raw]
 
     def describe(group: pd.DataFrame) -> pd.Series:
-        out = {"events": len(group)}
-        for phase in phases:
-            name = phase.removesuffix("Time_us")
-            out[f"{name} median time (ms)"] = group[phase].median() * ms
-            out[f"{name} p90 time (ms)"] = group[phase].quantile(0.9) * ms
-        out["mean time (ms)"] = group["totalTime_us"].mean() * ms
+        time = group["time (ms)"]
+        out = {"events (first left out)": len(group)}
+        out["mean time per event (ms)"] = time.mean()
+        out["median time per event (ms)"] = time.median()
+        out["p90 time per event (ms)"] = time.quantile(0.9)
+        out["slowest event (ms)"] = time.max()
         # events handled per second of finder time, one event after the other: the
         # inverse of the mean time, so the slowest events weigh as they do in the mean
-        out["throughput (events/s)"] = len(group) / (group["totalTime_us"].sum() / 1e6)
-        out["median time (ms)"] = group["totalTime_us"].median() * ms
-        out["p90 time (ms)"] = group["totalTime_us"].quantile(0.9) * ms
-        out["max time (ms)"] = group["totalTime_us"].max() * ms
-        out["median space points"] = group["nSpacePoints"].median()
+        out["throughput (events/s)"] = len(group) / (time.sum() / 1e3)
+        for name in stages.values():
+            out[f"{name} (median ms)"] = group[f"{name} (ms)"].median()
+            out[f"{name} (p90 ms)"] = group[f"{name} (ms)"].quantile(0.9)
+        out["median space points per event"] = group["space points"].median()
         # an event without space points has no cost to attribute to one, so it
         # is left out of this column only and counted beside it
-        occupied = group[group["nSpacePoints"] > 0]
+        occupied = group[group["space points"] > 0]
         out["median time per space point (ms)"] = (
-            (occupied["totalTime_us"] / occupied["nSpacePoints"]).median() * ms
+            (occupied["time (ms)"] / occupied["space points"]).median()
             if len(occupied) else float("nan"))
-        out["empty events"] = len(group) - len(occupied)
-        out["median patterns"] = group["nPatterns"].median()
+        out["events without space points"] = len(group) - len(occupied)
+        out["median patterns per event"] = group["patterns"].median()
+        if "overflow" in events:
+            out["events with an overflow"] = int((group[gpu_columns["overflow"]] != 0).sum())
         return pd.Series(out)
 
-    warm = events[~events["isFirst"]]
+    warm = table[~first]
     summary = warm.groupby(["run", "repetition"]).apply(
         describe, include_groups=False).reset_index()
+    counts = [c for c in summary.columns
+              if c.startswith(("events", "median space points",
+                               "median patterns"))]
+    summary[counts] = summary[counts].round().astype(int)
+    # microseconds are the finest the timing files hold
+    times = [c for c in summary.columns if "ms" in c]
+    summary[times] = summary[times].round(3)
+    summary["throughput (events/s)"] = summary["throughput (events/s)"].round(1)
+    table[[c for c in table.columns if "(ms)" in c]] = \
+        table[[c for c in table.columns if "(ms)" in c]].round(3)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    events.to_csv(args.output_dir / "events.csv", index=False)
+    table.to_csv(args.output_dir / "events.csv", index=False)
     summary.to_csv(args.output_dir / "summary.csv", index=False)
 
     print(summary.to_string(index=False))

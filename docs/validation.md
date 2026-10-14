@@ -97,8 +97,8 @@ bars are Clopper-Pearson intervals at 68.3%, ROOT's `TEfficiency` default.
 The selection is applied to the denominator, so the coverage edge of the
 spectrometer does not appear: muons outside |η| < 2.4 are not counted. A single
 figure is quoted together with this selection, and the plot is the primary
-result. The number of selected muons is `truth_muons` in `scores.csv`, next to
-`truth_muons_all`.
+result. The number of selected muons is `truth muons selected for the efficiency` in
+`scores.csv`, next to `truth muons in the events`.
 
 ### What changed
 
@@ -119,7 +119,7 @@ ones made after it.
 - **The selection reads the muon's hits, not the finder's configuration**, so
   loosening the finder cannot change which muons are counted. A muon that left
   too few hits is excluded, and nothing here says how many those are beyond
-  `truth_muons_all` minus `truth_muons`.
+  `truth muons in the events` minus `truth muons selected for the efficiency`.
 - **Two best matches that are equal in both quantities leave the muon without
   one.** The source requires a strict win, so such a muon counts as missed and
   both patterns as fakes. It is rare, since the residual is a real number, but it

@@ -91,7 +91,7 @@ because the example event model has no `primaryMeasurement()`. Recorded in
 for Athena and two for us, so patterns overlap less by our count than by theirs.
 
 **What it would look like:** more duplicates, since patterns that Athena merges
-we keep apart. Look at `duplicates_per_found_muon` before suspecting anything
+we keep apart. Look at `duplicates per found muon` before suspecting anything
 else.
 
 ---

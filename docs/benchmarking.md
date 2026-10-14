@@ -42,8 +42,10 @@ totalTime_us, uploadTime_us, kernelTime_us, downloadTime_us
 ```
 
 `totalTime_us` stays the end to end, which is below the sum of the phases by
-however much transfer and compute overlap. The aggregator summarises every
-column ending in `Time_us`, so the extra ones need no change to it.
+however much transfer and compute overlap. The raw files keep these names and
+microseconds; `events.csv` and `summary.csv` give the same numbers in
+milliseconds under names that say what each stage is, e.g. `GPU kernels (ms)`
+and `GPU kernels (median ms)`.
 
 Transfer and kernel have to be timed with CUDA events rather than a host clock:
 a kernel launch returns before the work is done, so a wall clock around it times

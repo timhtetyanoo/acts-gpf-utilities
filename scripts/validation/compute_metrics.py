@@ -105,8 +105,15 @@ def derive(data: dict[str, pd.DataFrame], station_thr: float,
     return patterns, muons
 
 
-def metrics(patterns: pd.DataFrame, muons: pd.DataFrame) -> dict:
-    events = int(patterns["event"].nunique()) if len(patterns) else 0
+#: Names of the columns of scores.csv. Each says what is counted and over what,
+#: so the file reads without this script
+EFFICIENCY = "efficiency (found / selected muons)"
+FAKE_RATE = "fake rate (event average; duplicates count as fakes)"
+DUPLICATES = "duplicates per found muon"
+
+
+def metrics(patterns: pd.DataFrame, muons: pd.DataFrame,
+            events_read: int) -> dict:
     selected = muons[muons["selected"]]
     found = selected[selected["found"]]
     matched = patterns[patterns["isMatch"]]
@@ -118,76 +125,79 @@ def metrics(patterns: pd.DataFrame, muons: pd.DataFrame) -> dict:
     fake_per_event = fake.groupby(patterns["event"]).mean()
     fake_per_event = fake_per_event[fake_per_event.index.isin(muons["event"])]
 
-    out = {
-        # Number of events that contain at least one pattern.
-        "events": events,
-        # Number of truth muons that pass the selection of the efficiency.
-        "truth_muons": len(selected),
-        # Number of truth muons in the sample, selected or not.
-        "truth_muons_all": len(muons),
-        # Number of patterns the pattern finder produced.
-        "patterns": len(patterns),
+    def mean(frame, column):
+        return float(frame[column].mean()) if len(frame) else np.nan
 
-        # 1. Efficiency
-        # Fraction of the selected truth muons that have a matching pattern.
-        # 1 means every muon was found.
-        "efficiency": len(found) / len(selected) if len(selected) else 0.0,
-        # Fraction of the surfaces where the muon left a hit that the pattern contains.
-        # Averaged over all found muons. 1 means no hit was missed.
-        "mean_completeness": float(found["completeness"].mean()) if len(found) else np.nan,
+    return {
+        "events read": events_read,
+        "events with patterns": int(patterns["event"].nunique()),
+        "truth muons in the events": len(muons),
+        # the muons that pass gpfval.truth_selection, the efficiency's denominator
+        "truth muons selected for the efficiency": len(selected),
+        "selected muons found": len(found),
+        "patterns (all events)": len(patterns),
 
-        # 2. Composition
-        # Fraction of a pattern's hits that belong to the muon it was matched
-        # to. Averaged over matched patterns. 1 means no foreign hits.
-        "mean_purity": float(matched["purity"].mean()) if len(matched) else np.nan,
-        # Fraction of a pattern's hits that belong to a different truth muon.
-        # Averaged over matched patterns. 0 means no hits from another muon.
-        "mean_mismatched": float(matched["mismatched"].mean()) if len(matched) else np.nan,
-        # Fraction of the hits selected by the pattern over the hits available in the buckets it drew from. 
-        # Averaged over matched patterns. Low means the finder rejected most of the hits around the muon.
-        "mean_selectivity": float(matched["selectivity"].mean()) if len(matched) else np.nan,
+        # 1. Efficiency: 1 means every selected muon was found
+        EFFICIENCY: len(found) / len(selected) if len(selected) else 0.0,
 
-        # 3. Hits on the path
-        # The mean squared pull of the muon's hits about its truth line.
-        # Averaged over matched patterns. About 1 is ideal; much larger means
-        # the hits are further from the truth than their errors say.
-        "median_meanSqPull": float(matched["meanSqPull"].median()) if len(matched) else np.nan,
-        
-        # 4. Fakes & Duplicates
-        # Fake rate as MuonFastRecoValidation reports it: the fraction of the
-        # patterns of an event that are not the best match of a muon, averaged
-        # over the events. Duplicates count as fakes. 0 is ideal.
-        "fake_rate": float(fake_per_event.mean()) if len(fake_per_event) else np.nan,
-        # The same fraction over all patterns at once.
-        "fake_fraction": float(fake.mean()) if len(fake) else 0.0,
-        # Average number of patterns per event.
-        "patterns_per_event": len(patterns) / events if events else 0.0,
-        # Average number of patterns per event that matched no truth muon.
-        # 0 is ideal.
-        "unmatched_per_event": len(unmatched) / events if events else 0.0,
-        # Fraction of all patterns that matched no truth muon. 0 is ideal.
-        "unmatched_fraction": len(unmatched) / len(patterns) if len(patterns) else 0.0,
-        # Average number of duplicates per found muon. 0 is ideal.
-        "duplicates_per_found_muon": (float(found["nDuplicates"].sum() / len(found))
-                                      if len(found) else 0.0),
+        # 4. Fakes and duplicates: 0 is ideal
+        DUPLICATES: (float(found["nDuplicates"].sum() / len(found))
+                     if len(found) else 0.0),
+        # as MuonFastRecoValidation reports it: the fraction of an event's
+        # patterns that are not the best match of a muon, averaged over the
+        # events with a pattern and a truth muon
+        FAKE_RATE: (float(fake_per_event.mean()) if len(fake_per_event)
+                    else np.nan),
+        "fake fraction (all patterns; duplicates count as fakes)":
+            float(fake.mean()) if len(fake) else 0.0,
+        "patterns matching no muon (fraction of all patterns)":
+            len(unmatched) / len(patterns) if len(patterns) else 0.0,
+        "patterns per event read":
+            len(patterns) / events_read if events_read else 0.0,
+        "patterns matching no muon per event read":
+            len(unmatched) / events_read if events_read else 0.0,
 
-        # 5. Direction
-        # Mean of the difference in eta between the pattern and the muon. 0 means the pattern eta is not systematically off.
-        "dEta_mean": float(found["dEta"].mean()) if len(found) else np.nan,
-        # Spread (standard deviation) of the difference in eta between the pattern and the muon. Smaller is better.
-        "dEta_std": float(found["dEta"].std()) if len(found) else np.nan,
-        # Mean of the difference in phi between the pattern and the muon. 0 means the pattern phi is not systematically off.
-        "dPhi_mean": float(found["dPhi"].mean()) if len(found) else np.nan,
-        # Spread (standard deviation) of the difference in phi between the pattern and the muon. Smaller is better.
-        "dPhi_std": float(found["dPhi"].std()) if len(found) else np.nan,
+        # 1 and 2. What the patterns hold
+        # fraction of the muon's hit surfaces that its pattern contains; 1 is ideal
+        "completeness of found muons (mean)": mean(found, "completeness"),
+        # fraction of a matched pattern's hits that belong to its muon; 1 is ideal
+        "purity of matched patterns (mean)": mean(matched, "purity"),
+        # fraction of a matched pattern's hits from another truth muon; 0 is ideal
+        "hits from another muon in matched patterns (mean fraction)":
+            mean(matched, "mismatched"),
+        # hits a matched pattern took over the hits of the buckets it drew from
+        "hits taken of those in the pattern's buckets (mean fraction)":
+            mean(matched, "selectivity"),
+
+        # 3. Hits on the path: about 1 is ideal
+        "mean squared pull of matched patterns about the truth line (median)":
+            (float(matched["meanSqPull"].median()) if len(matched) else np.nan),
+
+        # 5. Direction of the found muons' patterns
+        "eta of pattern minus truth (mean)": mean(found, "dEta"),
+        "eta of pattern minus truth (std)":
+            float(found["dEta"].std()) if len(found) else np.nan,
+        "phi of pattern minus truth (mean; rad)": mean(found, "dPhi"),
+        "phi of pattern minus truth (std; rad)":
+            float(found["dPhi"].std()) if len(found) else np.nan,
     }
-    return out
+
+
+def events_in(pattern_file: Path, tree: str) -> int:
+    """The events the finder ran over: the pattern file has one entry per event,
+    with or without patterns"""
+    import uproot
+    return int(uproot.open(pattern_file)[tree].num_entries)
 
 
 def main() -> int:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("tables", type=Path, help="Directory of build_validation_tables.py")
+    p.add_argument("--patterns", type=Path, required=True,
+                   help="Pattern file the tables were built from, for the "
+                        "number of events read")
+    p.add_argument("--pattern-tree", default="muonGlobalPatterns")
     p.add_argument("--sample", default="", help="Label of the sample, e.g. PG0")
     p.add_argument("--implementation", default="", help="Label, e.g. cpu or cuda")
     p.add_argument("--station-eff-thr", type=float, default=gpfval.STATION_EFF_THR,
@@ -200,15 +210,17 @@ def main() -> int:
     args = p.parse_args()
 
     data = load(args.tables)
+    events_read = events_in(args.patterns, args.pattern_tree)
 
     if args.scan:
+        print("Both match thresholds set to the same value:")
         print(f"{'threshold':>15}{'efficiency':>12}{'fake rate':>11}"
-              f"{'duplicates':>12}")
+              f"{'duplicates per found muon':>27}")
         for value in np.arange(0.1, 1.01, 0.1):
-            row = metrics(*derive(data, value, value))
-            print(f"{value:>15.1f}{row['efficiency']:>12.4f}"
-                  f"{row['fake_rate']:>11.4f}"
-                  f"{row['duplicates_per_found_muon']:>12.3f}")
+            row = metrics(*derive(data, value, value), events_read)
+            print(f"{value:>15.1f}{row[EFFICIENCY]:>12.4f}"
+                  f"{row[FAKE_RATE]:>11.4f}"
+                  f"{row[DUPLICATES]:>27.3f}")
         print()
 
     patterns, muons = derive(data, args.station_eff_thr, args.bending_eff_thr)
@@ -217,15 +229,20 @@ def main() -> int:
 
     summary = {
         "sample": args.sample or args.tables.name,
-        "implementation": args.implementation,
-        "station_eff_thr": args.station_eff_thr,
-        "bending_eff_thr": args.bending_eff_thr,
-        **metrics(patterns, muons),
+        "run": args.implementation,
+        "match needs more than this fraction of the muon's stations":
+            args.station_eff_thr,
+        "match needs more than this fraction of the muon's bending hits":
+            args.bending_eff_thr,
+        **metrics(patterns, muons, events_read),
     }
     width = max(len(key) for key in summary)
     for key, value in summary.items():
         print(f"{key:<{width}}  {value}")
 
+    # four significant digits: enough to tell two runs apart, short to read
+    summary = {key: (float(f"{value:.4g}") if isinstance(value, float) else value)
+               for key, value in summary.items()}
     if args.output:
         pd.DataFrame([summary]).to_csv(
             args.output, mode="a", header=not args.output.exists(), index=False)

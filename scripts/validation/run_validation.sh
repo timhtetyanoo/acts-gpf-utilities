@@ -90,6 +90,7 @@ fi
 
 # --- 3. the metrics ---------------------------------------------------------
 "${python}" "${script_dir}/compute_metrics.py" "${out_dir}/tables" \
+  --patterns "${patterns}" \
   --sample "${sample}" --implementation "${name}" \
   --station-eff-thr "${GPF_STATION_EFF_THR:-0.5}" \
   --bending-eff-thr "${GPF_BENDING_EFF_THR:-0.5}" \

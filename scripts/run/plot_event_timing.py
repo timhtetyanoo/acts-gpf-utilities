@@ -35,14 +35,14 @@ def main() -> int:
     args = p.parse_args()
 
     data = pd.read_csv(args.events)
-    data = data[~data["isFirst"]]
+    data = data[~data["first of the repetition (left out of the summary)"]]
     if data.empty:
         raise SystemExit("Nothing to plot")
-    data["totalTime_ms"] = data["totalTime_us"] / 1e3
+    data["totalTime_ms"] = data["time (ms)"]
 
     fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.4))
     for name, run in data.groupby("run"):
-        axes[0].plot(run["nSpacePoints"], run["totalTime_ms"], ".", ms=2,
+        axes[0].plot(run["space points"], run["totalTime_ms"], ".", ms=2,
                      alpha=0.5, label=name)
         axes[1].hist(run["totalTime_ms"], bins=40, histtype="step", lw=1.3,
                      label=f"{name}: median {run['totalTime_ms'].median():.2f} ms")

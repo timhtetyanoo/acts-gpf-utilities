@@ -4,7 +4,7 @@
 Reads the `summary.csv` that aggregate_event_timing.py writes for each run and
 reduces each to its median over the repetitions, giving one row:
 
-    mean time, <reference> (ms) | mean time, <compare> (ms) | mean time speedup | ...
+    mean time per event, <reference> (ms) | ..., <compare> (ms) | ... speedup | ...
 
 The speedup is the reference divided by the compared value for a time and the
 compared divided by the reference for a throughput, so a number above one always
@@ -25,22 +25,30 @@ import pandas as pd
 #: Columns compared, as source column -> (name in the output, unit, higher is
 #: better). A time is better when it is smaller, a throughput when it is larger
 COLUMNS = {
-    "mean time (ms)": ("mean time", "ms", False),
-    "median time (ms)": ("median time", "ms", False),
-    "p90 time (ms)": ("p90 time", "ms", False),
+    "mean time per event (ms)": ("mean time per event", "ms", False),
+    "median time per event (ms)": ("median time per event", "ms", False),
+    "p90 time per event (ms)": ("p90 time per event", "ms", False),
     "median time per space point (ms)": ("time per space point", "ms", False),
     "throughput (events/s)": ("throughput", "events/s", True),
+}
+#: The names of the same columns in summaries written before they were renamed
+OLD_NAMES = {
+    "mean time per event (ms)": ["mean time (ms)", "mean time (us)"],
+    "median time per event (ms)": ["median time (ms)", "median time (us)"],
+    "p90 time per event (ms)": ["p90 time (ms)", "p90 time (us)"],
+    "median time per space point (ms)": ["median time per space point (us)"],
 }
 
 
 def per_run(path: Path) -> pd.Series:
-    """The median over the repetitions the summary holds. A summary written
-    before the times were in milliseconds has them in microseconds"""
+    """The median over the repetitions the summary holds. Older summaries
+    name the columns differently, and the oldest have microseconds"""
     frame = pd.read_csv(path)
-    for column in COLUMNS:
-        old = column.replace("(ms)", "(us)")
-        if column not in frame.columns and old in frame.columns:
-            frame[column] = frame[old] * 1e-3
+    for column, old_names in OLD_NAMES.items():
+        for old in old_names:
+            if column not in frame.columns and old in frame.columns:
+                scale = 1e-3 if old.endswith("(us)") else 1.0
+                frame[column] = frame[old] * scale
     missing = [c for c in COLUMNS if c not in frame.columns]
     if missing:
         raise SystemExit(f"{path} has no column {missing[0]}")
