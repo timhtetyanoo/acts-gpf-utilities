@@ -71,6 +71,9 @@ def main() -> int:
         "fillTime_us": "host: candidate lists",
         "uploadTime_us": "copy to GPU",
         "kernelTime_us": "GPU kernels",
+        "seedTime_us": "GPU kernels: seed checks",
+        "buildTime_us": "GPU kernels: pattern building",
+        "overlapTime_us": "GPU kernels: overlaps and compaction",
         "downloadTime_us": "copy from GPU",
         "tailTime_us": "host: phi-only hits and output",
     }
