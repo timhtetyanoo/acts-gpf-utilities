@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-"""Put two timing summaries side by side and divide them.
+"""Put two timing summaries side by side.
 
-Reads the `summary.csv` that aggregate_event_timing.py writes for each run and
-reduces each to its median over the repetitions, giving one row:
+Reads the `summary.csv` that aggregate_event_timing.py writes for each run,
+reduces each to its median over the repetitions and writes one row per measure:
 
-    mean time per event, <reference> (ms) | ..., <compare> (ms) | ... speedup | ...
+    measure | <reference> | <compared> | speedup
 
 The speedup is the reference divided by the compared value for a time and the
 compared divided by the reference for a throughput, so a number above one always
-means the compared run is faster.
-
-The two summaries are taken as they are; the labels are given on the command
-line.
+means the compared run is faster. The stages of the GPU path are listed when
+both runs have them.
 """
 
 from __future__ import annotations
@@ -22,20 +20,22 @@ from pathlib import Path
 
 import pandas as pd
 
-#: Columns compared, as source column -> (name in the output, unit, higher is
-#: better). A time is better when it is smaller, a throughput when it is larger
-COLUMNS = {
-    "mean time per event (ms)": ("mean time per event", "ms", False),
-    "median time per event (ms)": ("median time per event", "ms", False),
-    "p90 time per event (ms)": ("p90 time per event", "ms", False),
-    "median time per space point (ms)": ("time per space point", "ms", False),
-    "throughput (events/s)": ("throughput", "events/s", True),
-}
+#: Measures of every run, in the order they are listed; a throughput is better
+#: when larger, everything else is a time
+MEASURES = [
+    "mean time per event (ms)",
+    "median time per event (ms)",
+    "p90 time per event (ms)",
+    "slowest event (ms)",
+    "median time per space point (ms)",
+    "throughput (events/s)",
+]
 #: The names of the same columns in summaries written before they were renamed
 OLD_NAMES = {
     "mean time per event (ms)": ["mean time (ms)", "mean time (us)"],
     "median time per event (ms)": ["median time (ms)", "median time (us)"],
     "p90 time per event (ms)": ["p90 time (ms)", "p90 time (us)"],
+    "slowest event (ms)": ["max time (ms)", "max time (us)"],
     "median time per space point (ms)": ["median time per space point (us)"],
 }
 
@@ -49,10 +49,7 @@ def per_run(path: Path) -> pd.Series:
             if column not in frame.columns and old in frame.columns:
                 scale = 1e-3 if old.endswith("(us)") else 1.0
                 frame[column] = frame[old] * scale
-    missing = [c for c in COLUMNS if c not in frame.columns]
-    if missing:
-        raise SystemExit(f"{path} has no column {missing[0]}")
-    return frame[list(COLUMNS)].median()
+    return frame.select_dtypes("number").median()
 
 
 def main() -> int:
@@ -67,22 +64,25 @@ def main() -> int:
 
     reference = per_run(args.reference)
     compared = per_run(args.compared)
+    stages = [c for c in reference.index
+              if c.endswith("(median ms)") and c in compared.index]
+    measures = [m for m in MEASURES
+                if m in reference.index and m in compared.index] + stages
 
-    row = {}
-    for column, (name, unit, higher_is_better) in COLUMNS.items():
-        row[f"{name}, {args.reference_label} ({unit})"] = reference[column]
-        row[f"{name}, {args.compare_label} ({unit})"] = compared[column]
-        # above one always means the compared run is better
-        row[f"{name} speedup"] = (compared[column] / reference[column]
-                                  if higher_is_better
-                                  else reference[column] / compared[column])
-    out = pd.DataFrame([row])
+    rows = []
+    for measure in measures:
+        ref, cmp = reference[measure], compared[measure]
+        speedup = cmp / ref if "events/s" in measure else ref / cmp
+        rows.append({"measure": measure,
+                     args.reference_label: float(f"{ref:.4g}"),
+                     args.compare_label: float(f"{cmp:.4g}"),
+                     f"speedup (above 1: {args.compare_label} is faster)":
+                         float(f"{speedup:.3g}")})
+    out = pd.DataFrame(rows)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(args.output, index=False)
     print(out.to_string(index=False))
-    print(f"\nSpeedup is {args.reference_label} over {args.compare_label}; "
-          f"above one means {args.compare_label} is faster")
     return 0
 
 

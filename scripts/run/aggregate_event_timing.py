@@ -135,8 +135,9 @@ def main() -> int:
                                "median patterns"))]
     summary[counts] = summary[counts].round().astype(int)
     # microseconds are the finest the timing files hold
+    # four significant digits, so that small times keep their precision
     times = [c for c in summary.columns if "ms" in c]
-    summary[times] = summary[times].round(3)
+    summary[times] = summary[times].map(lambda v: float(f"{v:.4g}"))
     summary["throughput (events/s)"] = summary["throughput (events/s)"].round(1)
     table[[c for c in table.columns if "(ms)" in c]] = \
         table[[c for c in table.columns if "(ms)" in c]].round(3)

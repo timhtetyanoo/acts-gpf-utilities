@@ -14,8 +14,8 @@
 # Writes into results/compare/<reference>_vs_<compare>/:
 #   patterns.log     the patterns, hit by hit (needs both patterns.root)
 #   plots/           the figures of both runs overlaid (needs both validations)
-#   scores.csv       the metrics of both runs in one table
-#   speedup.csv      the timing of both runs and the speedup (needs both timings)
+#   scores.csv       the metrics of both runs side by side, and the difference
+#   speedup.csv      the timing of both runs side by side, and the speedup
 #
 # Only compatible runs are compared: the same sample, the same n-tuple and the
 # same event count, read from run_info.txt of each. Otherwise the two would not
@@ -80,7 +80,7 @@ if ((incompatible)); then
 fi
 
 # replace what an earlier comparison wrote, and leave hough/, which step 3 writes
-rm -rf -- "${out_dir}/patterns.log" "${out_dir}/plots" "${out_dir}/scores.csv" \
+rm -rf -- "${out_dir}/patterns.log" "${out_dir}/plots" "${out_dir}/scores.csv" "${out_dir}/scores.log" \
   "${out_dir}/speedup.csv" "${out_dir}/speedup.log"
 mkdir -p -- "${out_dir}"
 did_anything=0
@@ -109,12 +109,11 @@ if [[ -f "${reference_val}/tables/muon_flags.parquet"
   did_anything=1
 fi
 if [[ -f "${reference_val}/scores.csv" && -f "${compare_val}/scores.csv" ]]; then
-  {
-    printf 'run,'; head -n 1 -- "${reference_val}/scores.csv"
-    tail -n +2 -- "${reference_val}/scores.csv" | sed "s/^/${reference},/"
-    tail -n +2 -- "${compare_val}/scores.csv"   | sed "s/^/${compared},/"
-  } >"${out_dir}/scores.csv"
-  echo "Metrics of both runs in ${out_dir}/scores.csv"
+  echo
+  "${python}" "${script_dir}/compare_scores.py" \
+    "${reference_val}/scores.csv" "${compare_val}/scores.csv" \
+    --reference-label "${reference}" --compare-label "${compared}" \
+    --output "${out_dir}/scores.csv" | tee -- "${out_dir}/scores.log"
   did_anything=1
 fi
 
