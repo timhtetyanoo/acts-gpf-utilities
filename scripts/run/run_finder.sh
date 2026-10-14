@@ -8,14 +8,14 @@
 # name, the sample, the event count and the build to use are what a config file
 # of one run holds:
 #
-#   run_finder.sh --config configs/cpu/cpu_pg0_all.conf
+#   run_finder.sh --config configs/cpu_pg0.conf
 #   run_finder.sh --name cpu_test --sample PG0 --ntuple data/ParticleGun_MU0.root \
 #     --geometry data/ActsTrackingGeometry_PG0.json --events 100 --repetitions 2
 #
 # Runs bin/ActsUnitTestGlobalPatternFinderData over the sample, several times,
 # or with --backend cuda its GPU twin bin/ActsUnitTestCudaGlobalPatternFinderData,
-# which needs a build with ACTS_BUILD_EXAMPLES_CUDA_GLOBAL_PATTERN_FINDER=ON;
-# --backend cuda_v2 runs the same binary with version 2 of the GPU finding. The
+# which needs a build with ACTS_BUILD_EXAMPLES_CUDA_GLOBAL_PATTERN_FINDER=ON; the
+# GPU version is whichever the checkout of that build holds. The
 # GPU run writes the same files; its timing has a column per stage of the GPU
 # path besides the total.
 # Each repetition times every call of the finder on its own and writes one row
@@ -51,7 +51,7 @@
 #   GPF_PROFILE       1: the stages of the CPU finder into profile/, read by
 #                     scripts/profile/analyze_profile.py. Needs the profiling
 #                     build, -DACTS_GPF_PROFILE on the gpf-profiling branch
-#   GPF_BACKEND       cpu, cuda or cuda_v2             (default: cpu)
+#   GPF_BACKEND       cpu or cuda                      (default: cpu)
 #   GPF_BATCH_SIZE    seeds built at once on the GPU   (default: the algorithm's)
 #   ACTS_SOURCE_DIR   ACTS source tree                 (default: <this repo>/../acts)
 #   ACTS_BUILD_DIR    build directory                  (default: ${ACTS_SOURCE_DIR}/build)
@@ -83,13 +83,9 @@ python="$(gpf_python)"
 backend="${GPF_BACKEND:-cpu}"
 case "${backend}" in
   cpu) executable="${build_dir}/bin/ActsUnitTestGlobalPatternFinderData" ;;
-  cuda | cuda_v2)
-    executable="${build_dir}/bin/ActsUnitTestCudaGlobalPatternFinderData" ;;
-  *) echo "GPF_BACKEND has to be cpu, cuda or cuda_v2, not ${backend}" >&2; exit 1 ;;
+  cuda) executable="${build_dir}/bin/ActsUnitTestCudaGlobalPatternFinderData" ;;
+  *) echo "GPF_BACKEND has to be cpu or cuda, not ${backend}" >&2; exit 1 ;;
 esac
-# The version of the GPU finding that the binary runs
-cuda_version=""
-[[ "${backend}" == cuda_v2 ]] && cuda_version=2
 events="${GPF_EVENTS:-500}"
 repetitions="${GPF_REPETITIONS:-3}"
 
@@ -126,7 +122,7 @@ mkdir -p -- "${run_dir}/timing/repetitions" "${run_dir}/logs"
   echo "first event:   ${GPF_FIRST_EVENT:-0}"
   [[ -n "${GPF_PROFILE:-}" ]] && echo "profile:       yes"
   echo "backend:       ${backend}"
-  [[ "${backend}" == cuda* ]] && echo "batch size:    ${GPF_BATCH_SIZE:-default}"
+  [[ "${backend}" == cuda ]] && echo "batch size:    ${GPF_BATCH_SIZE:-default}"
   echo "build:         ${build_dir}"
   echo "executable:    ${executable} ($(date -r "${executable}" '+%F %T'))"
   echo "acts branch:   $(git -C "${source_dir}" branch --show-current 2>/dev/null || echo unknown)"
@@ -157,7 +153,6 @@ run_cpp() {
   ACTS_GPF_OUTPUT="${output}" \
   ACTS_GPF_LOG_LEVEL=WARNING \
   ACTS_GPF_BATCH_SIZE="${GPF_BATCH_SIZE:-}" \
-  ACTS_GPF_CUDA_VERSION="${cuda_version}" \
   ACTS_GPF_FIRST_EVENT="${GPF_FIRST_EVENT:-}" \
   ACTS_GPF_PROFILE_DIR="${profile}" \
     "${executable}" --log_level=error --report_level=no --color_output=no \

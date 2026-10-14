@@ -5,7 +5,7 @@
 # alone to redo the analysis of the timing files that are already there.
 #
 #   analyze_timing.sh --name cpu_pg0_all
-#   analyze_timing.sh --config configs/cpu/cpu_pg0_all.conf
+#   analyze_timing.sh --config configs/cpu_pg0.conf
 #
 # Reads  results/<name>/timing/repetitions/timing_r*.csv
 # Writes results/<name>/timing/summary.csv, events.csv and event_timing.png

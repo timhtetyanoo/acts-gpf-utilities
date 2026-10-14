@@ -12,7 +12,7 @@
 # run unless given.
 #
 #   run_validation.sh --name cpu_pg0_all
-#   run_validation.sh --config configs/cpu/cpu_pg0_all.conf
+#   run_validation.sh --config configs/cpu_pg0.conf
 #
 # Writes into results/<name>/validation/:
 #   scores.csv       the metrics
