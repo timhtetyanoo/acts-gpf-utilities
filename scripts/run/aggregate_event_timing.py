@@ -69,6 +69,10 @@ def main() -> int:
     stages = {
         "treeTime_us": "host: positions and search tree",
         "fillTime_us": "host: candidate lists",
+        # the experimental branch: the search on the GPU
+        "usedHitsTime_us": "host: used hits and bucket transforms",
+        "columnsTime_us": "host: hit columns",
+        "searchTime_us": "GPU: search and candidate lists",
         "uploadTime_us": "copy to GPU",
         "kernelTime_us": "GPU kernels",
         "seedTime_us": "GPU kernels: seed checks",
