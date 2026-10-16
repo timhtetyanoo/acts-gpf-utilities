@@ -5,7 +5,7 @@
 # to each other. Each part is done when both runs have what it needs, so a run
 # that was only timed, or only validated, still gets what it can.
 #
-#   run_compare.sh --reference cpu_pg0_all --compare cuda_pg0_all
+#   run_compare.sh --reference cpu_pg0_all --compare cuda_v2_pg0_all
 #
 #   --reference NAME     the run the other is measured against
 #   --compare NAME       the run compared with it

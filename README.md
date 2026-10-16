@@ -79,7 +79,7 @@ only the label the tables and the plots show.
 
 A **run** has a name, and everything it produces goes into `results/<name>/`.
 The name is the only thing that tells two runs apart, so give each run one that
-says what it is: `cpu_pg0_all`, `cuda_pg200_500ev`. A config file holds one run:
+says what it is: `cpu_pg0_all`, `cuda_v2_pg200_500ev`. A config file holds one run:
 
 ```bash
 # configs/cpu_pg0.conf
@@ -229,7 +229,7 @@ and the efficiency on the patterns are drawn.
 ### Comparison (after the fact)
 
 ```bash
-scripts/compare/run_compare.sh --reference cpu_pg0_all --compare cuda_pg0_all
+scripts/compare/run_compare.sh --reference cpu_pg0_all --compare cuda_v2_pg0_all
 ```
 
 Takes two runs by name. The patterns of the two give the hit-by-hit gate, their
@@ -278,8 +278,8 @@ pattern's hits, both at 0.5. `--scan` shows how the numbers move with it.
 
 ```bash
 scripts/validation/make_plots.py results/cpu_pg0_all/validation/tables \
-  results/cuda_pg0_all/validation/tables \
-  --labels cpu_pg0_all cuda_pg0_all --output-dir plots
+  results/cuda_v2_pg0_all/validation/tables \
+  --labels cpu_pg0_all cuda_v2_pg0_all --output-dir plots
 ```
 
 One figure per test, with the quantities of that test side by side:
@@ -299,7 +299,7 @@ overlaid, which is how CUDA is compared with the CPU reference.
 
 ```bash
 scripts/validation/compare_patterns.py results/cpu_pg0_all/patterns.root \
-  results/cuda_pg0_all/patterns.root
+  results/cuda_v2_pg0_all/patterns.root
 ```
 
 Two runs over the same space points, compared. Nothing in it knows which

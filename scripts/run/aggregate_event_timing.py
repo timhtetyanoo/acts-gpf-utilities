@@ -12,7 +12,8 @@ they hold:
   events.csv   every event of every repetition, with the name of the run, for
                plotting the cost against the occupancy
   summary.csv  one row per repetition: the mean, median, p90 and slowest event,
-               and the median and p90 of each stage of the GPU path
+               and the median and p90 of each of the five stages of the GPU
+               path: host before, copy to GPU, kernels, copy back, host after
 
 Both the mean and the median are written. They answer different questions and
 differ a lot where a few events are far slower than the rest: the mean is the
@@ -65,21 +66,13 @@ def main() -> int:
         == events["event"]
 
     ms = 1e-3  # microseconds of the raw files to milliseconds
-    # the stages of the GPU path, as the timing files name them
+    # the stages of the GPU path, as the timing files name them, in order
     stages = {
-        "treeTime_us": "host: positions and search tree",
-        "fillTime_us": "host: candidate lists",
-        # the experimental branch: the search on the GPU
-        "usedHitsTime_us": "host: used hits and bucket transforms",
-        "columnsTime_us": "host: hit columns",
-        "searchTime_us": "GPU: search and candidate lists",
+        "hostPreTime_us": "host before the GPU",
         "uploadTime_us": "copy to GPU",
         "kernelTime_us": "GPU kernels",
-        "seedTime_us": "GPU kernels: seed checks",
-        "buildTime_us": "GPU kernels: pattern building",
-        "overlapTime_us": "GPU kernels: overlaps and compaction",
         "downloadTime_us": "copy from GPU",
-        "tailTime_us": "host: phi-only hits and output",
+        "hostPostTime_us": "host after the GPU",
     }
     stages = {raw: name for raw, name in stages.items() if raw in events}
 
