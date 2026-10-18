@@ -3,9 +3,9 @@
 # Step 2 of 2: validates the patterns that step 1 wrote, with the selection and
 # the matching of MuonFastRecoValidation (see scripts/validation/gpfval.py). It never runs the
 # finder: it reads results/<name>/patterns.root and the input n-tuple, and builds
-# the validation tables, the FastReco tuple, the metrics and the figures. Every
-# run redoes every stage: the tables follow from the patterns and the n-tuple, so
-# reusing old ones could only mean tables of an older run.
+# the validation tables, the metrics and the figures. Every run redoes every
+# stage: the tables follow from the patterns and the n-tuple, so reusing old ones
+# could only mean tables of an older run.
 #
 # Runs anywhere the results folder and the n-tuple are: no ACTS build, no
 # tracking geometry. The sample and the n-tuple are taken from run_info.txt of the
@@ -19,7 +19,9 @@
 #   metrics.log      the same, and how they move with the matching ratio
 #   plots/           efficiency, composition, pulls, direction
 #   tables/          the parquet tables the metrics are computed from
-#   fastreco.root    the n-tuple for MuonFastRecoValidation (needs ROOT)
+#
+# The n-tuple for MuonFastRecoValidation is written by run_hough_plots.sh, from
+# these tables, only when its plots are wanted.
 #
 # Settings (flags are listed in scripts/gpf_common.sh):
 #   GPF_NAME          name of the run                  (required)
@@ -76,19 +78,7 @@ mkdir -p -- "${out_dir}"
 "${python}" "${script_dir}/build_validation_tables.py" \
   "${patterns}" "${ntuple}" "${out_dir}/tables"
 
-# --- 2. the n-tuple for MuonFastRecoValidation ------------------------------
-# Read by the FastRecoValidation executable of houghidipuffvalidation, branch
-# LeonardoDev. Needs ROOT, which the LCG environment of env_setup.sh provides;
-# without it the stage is skipped and the others still finish.
-if gpf_has_root "${python}"; then
-  "${python}" "${script_dir}/to_fastreco_tuple.py" \
-    "${out_dir}/tables" "${out_dir}/fastreco.root"
-else
-  echo "Skipping the FastReco tuple: ${python} cannot import ROOT." >&2
-  echo "Run \`source env_setup.sh\` and repeat to get it." >&2
-fi
-
-# --- 3. the metrics ---------------------------------------------------------
+# --- 2. the metrics ---------------------------------------------------------
 "${python}" "${script_dir}/compute_metrics.py" "${out_dir}/tables" \
   --patterns "${patterns}" \
   --sample "${sample}" --implementation "${name}" \
@@ -96,7 +86,7 @@ fi
   --bending-eff-thr "${GPF_BENDING_EFF_THR:-0.5}" \
   --scan --output "${out_dir}/scores.csv" | tee -- "${out_dir}/metrics.log"
 
-# --- 4. the figures ---------------------------------------------------------
+# --- 3. the figures ---------------------------------------------------------
 "${python}" "${script_dir}/make_plots.py" "${out_dir}/tables" \
   --labels "${name}" --sample "${sample}" --output-dir "${out_dir}/plots"
 

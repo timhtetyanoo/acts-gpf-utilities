@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # Step 3, optional: the figures of MuonFastRecoValidation, the plotting package of
-# houghidipuffvalidation (branch LeonardoDev), drawn from the fastreco.root that
-# step 2 wrote. It runs the executable and nothing else.
+# houghidipuffvalidation (branch LeonardoDev). It writes each run's n-tuple for
+# the package, validation/fastreco.root, from the tables of step 2, then runs the
+# executable. The n-tuple is rewritten only when the tables are newer than it.
 #
 #   run_hough_plots.sh cpu_pg0_all                one run
 #   run_hough_plots.sh cpu_before cpu_after       several runs, one curve each
@@ -14,6 +15,9 @@
 #   cd <build directory of houghidipuffvalidation>
 #   asetup --restore
 #   source <platform>/setup.sh          # e.g. x86_64-el9-gcc15-opt/setup.sh
+#
+# The python3 of that shell writes the n-tuple: the release has ROOT, numpy,
+# pandas and pyarrow. PYTHON names another interpreter.
 #
 # One name writes into results/<name>/hough/, several into
 # results/compare/<first>_vs_<second>.../hough/. Several runs have to be of the
@@ -36,7 +40,7 @@ names=()
 results_dir="${GPF_RESULTS_DIR:-${repo_root}/results}"
 sample_text=""
 
-usage() { sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
+usage() { sed -n '2,33p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
 
 while (($#)); do
   case "$1" in
@@ -59,17 +63,22 @@ fi
 # @brief A value of the run_info.txt of a run
 info() { sed -n "s/^$2: *//p" "$1/run_info.txt" 2>/dev/null | head -n 1; }
 
+python="${PYTHON:-python3}"
+if ! "${python}" -c 'import ROOT, numpy, pandas, pyarrow' >/dev/null 2>&1; then
+  echo "${python} cannot import ROOT, numpy, pandas and pyarrow." >&2
+  echo "Set up Athena as in --help, or point PYTHON at an interpreter that has them." >&2
+  exit 1
+fi
+
 results_dir="$(cd -- "${results_dir}" && pwd)"
 inputs=()
 for name in "${names[@]}"; do
-  run="${results_dir}/${name}"
-  tuple="${run}/validation/fastreco.root"
-  if [[ ! -f "${tuple}" ]]; then
-    echo "No ${tuple}: run scripts/validation/run_validation.sh --name ${name} first," >&2
-    echo "in a shell where ROOT is available, since that stage writes the file." >&2
+  tables="${results_dir}/${name}/validation/tables"
+  if [[ ! -d "${tables}" ]]; then
+    echo "No ${tables}: run scripts/validation/run_validation.sh --name ${name} first." >&2
     exit 1
   fi
-  inputs+=("${name}=${tuple}")
+  inputs+=("${name}=${results_dir}/${name}/validation/fastreco.root")
 done
 
 # --- several runs must have seen the same events ------------------------------
@@ -98,6 +107,17 @@ rm -rf -- "${out_dir}"
 mkdir -p -- "${out_dir}"
 
 sample_text="${sample_text:-$(info "${first}" sample)}"
+
+# --- the n-tuple of each run --------------------------------------------------
+# Written from the tables, and written again when they have been rebuilt since.
+for name in "${names[@]}"; do
+  tables="${results_dir}/${name}/validation/tables"
+  tuple="${results_dir}/${name}/validation/fastreco.root"
+  if [[ ! -f "${tuple}" || "${tables}/patterns.parquet" -nt "${tuple}" \
+        || "${tables}/muons.parquet" -nt "${tuple}" ]]; then
+    "${python}" "${script_dir}/to_fastreco_tuple.py" "${tables}" "${tuple}"
+  fi
+done
 
 echo "Plotting ${names[*]} into ${out_dir}"
 # The tool prints a line for every truth muon without a reconstructed muon, which

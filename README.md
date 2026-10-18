@@ -46,8 +46,8 @@ docs/
 - Bash;
 - an ACTS build containing `ActsUnitTestGlobalPatternFinderData`, for stage 1
   only; the analysis stages need no build;
-- Python 3.10 or newer with the packages of `requirements.txt` and, for the
-  FastReco tuple, ROOT: the LCG environment of `env_setup.sh` has all of them;
+- Python 3.10 or newer with the packages of `requirements.txt`: the LCG
+  environment of `env_setup.sh` has all of them;
 - the Athena-exported n-tuples and the matching tracking geometry.
 
 Source `env_setup.sh` before running anything. The scripts use the `python3` of
@@ -136,8 +136,8 @@ results/
     timing/                 step 1: summary.csv, events.csv, event_timing.png,
                             repetitions/ (raw)
     logs/                   step 1: finder output of each repetition
-    validation/             step 2: scores.csv, metrics.log, plots/, tables/,
-                            fastreco.root
+    validation/             step 2: scores.csv, metrics.log, plots/, tables/;
+                            step 3: fastreco.root
     hough/                  step 3: the figures of MuonFastRecoValidation
   compare/
     <reference>_vs_<compare>/   patterns.log, plots/, scores.csv, speedup.csv,
@@ -185,18 +185,18 @@ scripts/validation/run_validation.sh --name cpu_pg0_all
 ```
 
 Reads `results/<name>/patterns.root` and the input n-tuple (named in
-`run_info.txt`) and writes tables, the FastReco tuple, `scores.csv` and the
-physics plots into `results/<name>/validation/`. The FastReco tuple needs ROOT,
-which the LCG environment provides; without it that stage is skipped and the rest
-finishes.
+`run_info.txt`) and writes tables, `scores.csv` and the physics plots into
+`results/<name>/validation/`.
 
 ### Step 3 (optional): the plotting package
 
 `MuonFastRecoValidation`, in houghidipuffvalidation (branch `LeonardoDev`), draws
 the efficiency, the fake rate and the hit and station plots of the ATLAS muon
-group from the `fastreco.root` of step 2. It needs an Athena release, which the
-LCG environment is not, so it runs in its own shell and its results are copied
-into the run's folder by the script:
+group. The script first writes the package's n-tuple, `validation/fastreco.root`,
+from the tables of step 2, and rewrites it only when the tables are newer, so
+step 2 does not pay for it when these plots are not wanted. It needs an Athena
+release, which the LCG environment is not, so it runs in its own shell and its
+results are copied into the run's folder by the script:
 
 ```bash
 setupATLAS

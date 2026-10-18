@@ -145,8 +145,3 @@ gpf_python() {
   printf '%s' "${python}"
 }
 
-# @brief Whether the interpreter can import ROOT
-# @param $1 interpreter
-gpf_has_root() {
-  "$1" -c 'import ROOT' >/dev/null 2>&1
-}
