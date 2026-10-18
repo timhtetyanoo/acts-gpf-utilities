@@ -1,0 +1,17 @@
+name:          cpu_pg200_all
+sample:        PG200
+ntuple:        /home/hoo/cern/acts-gpf-utilities/data/ParticleGun_MU200.root
+geometry:      /home/hoo/cern/acts-gpf-utilities/data/ActsTrackingGeometry_PG200.json
+events:        all
+repetitions:   3
+first event:   0
+backend:       cpu
+build:         /home/hoo/cern/acts/build
+executable:    /home/hoo/cern/acts/build/bin/ActsUnitTestGlobalPatternFinderData (2026-10-18 17:00:48)
+acts branch:   cuda-glob-pat-finder-v2
+acts revision: 70562d13d
+utilities rev: e30db88
+host:          at-tdaq-mldev02
+gpu:           NVIDIA RTX 5000 Ada Generation
+started:       2026-10-18 20:56:52
+finished:      2026-10-18 21:10:21
