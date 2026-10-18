@@ -107,8 +107,6 @@ def main() -> int:
         "nSeeds": "seeds",
         "nCandidates": "candidate hits of all seeds",
         "nPatternsInEta": "patterns kept on the GPU",
-        "capacityPerSeed": "patterns a seed had room for",
-        "largestBeam": "most patterns a seed held at once",
         "overflow": ("overflow (0 none; +1 a seed's patterns; +2 a pattern's "
                      "hits; +4 the event's patterns)"),
     }
