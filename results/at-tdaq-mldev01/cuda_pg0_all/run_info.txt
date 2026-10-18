@@ -1,0 +1,17 @@
+name:          cuda_pg0_all
+sample:        PG0
+ntuple:        /home/hoo/cern/acts-gpf-utilities/data/ParticleGun_MU0.root
+geometry:      /home/hoo/cern/acts-gpf-utilities/data/ActsTrackingGeometry_PG0.json
+events:        all
+repetitions:   3
+first event:   0
+backend:       cuda
+batch size:    default
+build:         /home/hoo/cern/acts/build_cuda
+executable:    /home/hoo/cern/acts/build_cuda/bin/ActsUnitTestCudaGlobalPatternFinderData (2026-10-18 19:50:03)
+acts branch:   cuda-glob-pat-finder-v2
+acts revision: ccb27a5df
+utilities rev: a90650c
+host:          at-tdaq-mldev01
+gpu:           NVIDIA RTX A5000
+started:       2026-10-18 19:50:06

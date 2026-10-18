@@ -1,0 +1,4 @@
+run,repetition,events,mean time per event (ms),median time per event (ms),p90 time per event (ms),slowest event (ms),throughput (events/s),median space points per event,median time per space point (ms),events without space points,median patterns per event,CPU cores in use by the process (mean),peak memory of the process (MiB),process wall time (s)
+cpu_pg200_all,r01,12000,8.312,5.582,7.959,9449.0,120.3,6330,0.0008756,0,5,0.9964,2551.0,273.5
+cpu_pg200_all,r02,12000,8.294,5.557,7.913,9539.0,120.6,6330,0.0008717,0,5,0.9962,2548.0,251.5
+cpu_pg200_all,r03,12000,8.326,5.585,7.954,9433.0,120.1,6330,0.0008753,0,5,0.9963,2548.0,252.6
