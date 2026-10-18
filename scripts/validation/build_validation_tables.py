@@ -76,6 +76,41 @@ def read_selected(tree, branches, wanted_ids, step="200 MB"):
     return ak.concatenate(kept)
 
 
+class EventColumns:
+    """The branches of a tree held as plain arrays, one event at a time.
+
+    Looking an event up in an awkward array costs milliseconds, and the tables
+    look up a dozen branches per event, so every branch is converted once:
+    a branch with one value per event into a NumPy array, one with a list per
+    event into a flat NumPy array and the offsets of each event, and one with a
+    list of lists per event into nested Python lists. An event's values are then
+    a slice or an index.
+    """
+
+    def __init__(self, array, branches):
+        self._scalar, self._flat, self._offsets, self._nested = {}, {}, {}, {}
+        for branch in branches:
+            column = array[branch]
+            if column.ndim == 1:
+                self._scalar[branch] = ak.to_numpy(column)
+            elif column.ndim == 2:
+                counts = ak.to_numpy(ak.num(column, axis=1))
+                self._offsets[branch] = np.concatenate(([0], np.cumsum(counts)))
+                self._flat[branch] = ak.to_numpy(ak.flatten(column, axis=1))
+            else:
+                self._nested[branch] = ak.to_list(column)
+
+    def event(self, index):
+        """The values of every branch for the entry at `index`."""
+        values = {name: column[index] for name, column in self._scalar.items()}
+        for name, flat in self._flat.items():
+            offsets = self._offsets[name]
+            values[name] = flat[offsets[index]:offsets[index + 1]]
+        for name, nested in self._nested.items():
+            values[name] = nested[index]
+        return values
+
+
 def truth_identifiers(truth_event):
     """The surfaces each muon crossed, and which segment claims each of them.
 
@@ -85,11 +120,11 @@ def truth_identifiers(truth_event):
     export. Nothing here pairs the two sets, so the shift cannot reach any test.
     """
     per_muon = defaultdict(set)
-    owner_of_segment = ak.to_numpy(truth_event["Segments_truthLink"])
+    owner_of_segment = truth_event["Segments_truthLink"]
     segment_of_id = {}
     for segment, ids in enumerate(truth_event["Segments_hitGeoIds"]):
         muon = int(owner_of_segment[segment])
-        for geo_id in ak.to_list(ids):
+        for geo_id in ids:
             per_muon[muon].add(int(geo_id))
             segment_of_id[int(geo_id)] = segment
     return per_muon, segment_of_id
@@ -104,7 +139,7 @@ def truth_lines(truth_event):
     """
     lines = {}
     for segment, values in enumerate(truth_event["Segments_localSegPars"]):
-        pars = np.asarray(ak.to_list(values), dtype=float)
+        pars = np.asarray(values, dtype=float)
         lines[segment] = (np.array([pars[2], pars[0], 0.0]),
                           gpfval.direction(pars[3], pars[1]))
     return lines
@@ -167,45 +202,55 @@ def main() -> int:
     truth_all = read_selected(ntuple["MuonTruth"], TRUTH_BRANCHES, wanted_ids)
     sp_of_id = {int(e): i for i, e in enumerate(ak.to_numpy(sp_all["event_id"]))}
     truth_of_id = {int(e): i for i, e in enumerate(ak.to_numpy(truth_all["event_id"]))}
+    sp_columns = EventColumns(sp_all, SP_BRANCHES)
+    truth_columns = EventColumns(truth_all, TRUTH_BRANCHES)
+    pattern_columns = EventColumns(patterns, PATTERN_BRANCHES)
 
     muon_rows, pattern_rows, chamber_rows = [], [], []
 
     for entry, event in enumerate(event_numbers):
         event_id = id_of_number[event]
-        sp_event = sp_all[sp_of_id[event_id]]
-        truth_event = truth_all[truth_of_id[event_id]]
+        sp_event = sp_columns.event(sp_of_id[event_id])
+        truth_event = truth_columns.event(truth_of_id[event_id])
+        pattern_event = pattern_columns.event(entry)
 
         # --- the hits of the event ------------------------------------------
-        sp_geo = ak.to_numpy(sp_event["spacePoint_geometryId"]).astype(np.int64)
-        sp_bucket = ak.to_numpy(sp_event["spacePoint_bucketId"]).astype(int)
-        sp_position = np.stack([ak.to_numpy(sp_event[f"spacePoint_localPos{a}"])
+        sp_geo = np.asarray(sp_event["spacePoint_geometryId"]).astype(np.int64)
+        sp_bucket = np.asarray(sp_event["spacePoint_bucketId"]).astype(int)
+        sp_position = np.stack([np.asarray(sp_event[f"spacePoint_localPos{a}"])
                                 for a in "XYZ"], axis=1).astype(float)
-        sp_drift = ak.to_numpy(sp_event["spacePoint_driftRadius"]).astype(float)
-        sp_variance = ak.to_numpy(sp_event["spacePoint_covLoc1"]).astype(float)
+        sp_drift = np.asarray(sp_event["spacePoint_driftRadius"]).astype(float)
+        sp_variance = np.asarray(sp_event["spacePoint_covLoc1"]).astype(float)
         # category and station of every hit of the event, for the counts taken
         # over a whole bucket
         sp_decoded = gpfval.decode_muon_id(
-            ak.to_numpy(sp_event["spacePoint_muonId"]))
+            np.asarray(sp_event["spacePoint_muonId"]))
         sp_category = gpfval.hit_categories(sp_decoded)
         sp_station = gpfval.station_index(sp_decoded["stationName"])
-        row_of_geo = {}
-        for row, geo_id in enumerate(sp_geo):
-            row_of_geo.setdefault(int(geo_id), row)
-        available = {int(g) for g in sp_geo}
+        # the first row of every identifier
+        unique_geo, first_row = np.unique(sp_geo, return_index=True)
+        row_of_geo = dict(zip(unique_geo.tolist(), first_row.tolist()))
+        available = set(row_of_geo)
         hits_in_bucket = np.bincount(
             sp_bucket, minlength=(int(sp_bucket.max()) + 1) if len(sp_bucket) else 1)
         # the writer names a hit by its bucket and its index within it; the
         # reader fills the buckets in tree order, so the index is a running
-        # counter that restarts with every new bucket
-        row_of_key, counters = {}, defaultdict(int)
-        for row, bucket in enumerate(sp_bucket):
-            row_of_key[(int(bucket), counters[bucket])] = row
-            counters[bucket] += 1
+        # counter that restarts with every new bucket: the rows of bucket b, in
+        # tree order, are rows_by_bucket[bucket_start[b]:bucket_start[b + 1]]
+        rows_by_bucket = np.argsort(sp_bucket, kind="stable")
+        bucket_start = np.concatenate(([0], np.cumsum(hits_in_bucket)))
+
+        def row_of_key(bucket, index):
+            """The row of the hit at `index` in `bucket`, None if there is none."""
+            if bucket < 0 or bucket >= len(hits_in_bucket) or \
+                    index < 0 or index >= hits_in_bucket[bucket]:
+                return None
+            return int(rows_by_bucket[bucket_start[bucket] + index])
 
         # --- the truth -------------------------------------------------------
         per_muon, segment_of_id = truth_identifiers(truth_event)
         lines = truth_lines(truth_event)
-        owner_of_segment = ak.to_numpy(truth_event["Segments_truthLink"])
+        owner_of_segment = truth_event["Segments_truthLink"]
         owner_of_id = {geo_id: muon for muon, ids in per_muon.items()
                        for geo_id in ids}
 
@@ -231,13 +276,13 @@ def main() -> int:
             })
 
         # --- the patterns ----------------------------------------------------
-        hit_pattern = ak.to_numpy(patterns["hit_patternIdx"][entry]).astype(int)
-        hit_geo = ak.to_numpy(patterns["hit_geometryId"][entry]).astype(np.int64)
-        hit_station = ak.to_numpy(patterns["hit_station"][entry]).astype(int)
-        hit_bucket = ak.to_numpy(patterns["hit_bucketId"][entry]).astype(int)
-        hit_index = ak.to_numpy(patterns["hit_indexInBucket"][entry]).astype(int)
+        hit_pattern = np.asarray(pattern_event["hit_patternIdx"]).astype(int)
+        hit_geo = np.asarray(pattern_event["hit_geometryId"]).astype(np.int64)
+        hit_station = np.asarray(pattern_event["hit_station"]).astype(int)
+        hit_bucket = np.asarray(pattern_event["hit_bucketId"]).astype(int)
+        hit_index = np.asarray(pattern_event["hit_indexInBucket"]).astype(int)
         hit_decoded = gpfval.decode_muon_id(
-            ak.to_numpy(patterns["hit_muonId"][entry]))
+            np.asarray(pattern_event["hit_muonId"]))
         hit_straw = hit_decoded["technology"] == gpfval.MDT
         hit_category = gpfval.hit_categories(hit_decoded)
         hit_side = hit_decoded["side"]
@@ -253,7 +298,7 @@ def main() -> int:
         for segment, stations in claimed.items():
             station_of_segment[segment] = int(np.bincount(stations).argmax())
 
-        for pattern in range(len(patterns["pattern_theta"][entry])):
+        for pattern in range(len(pattern_event["pattern_theta"])):
             mine = hit_pattern == pattern
             geo_ids = hit_geo[mine]
             stations = hit_station[mine]
@@ -280,7 +325,7 @@ def main() -> int:
                 "event": event, "pattern": pattern, "mainMuon": main,
                 "matchedMuons": [m for _, m in ranked],
                 "nStations": len(stations_present),
-                "sector": int(patterns["pattern_sector"][entry][pattern]),
+                "sector": int(pattern_event["pattern_sector"][pattern]),
                 # side of the first hit of the first station
                 "side": int(hit_side[mine][
                     np.argmax(stations == stations_present[0])])
@@ -310,13 +355,13 @@ def main() -> int:
                 "nHitsNoMuon": int(np.count_nonzero(owners < 0)),
                 # every hit of every bucket the pattern drew from: Athena's eAll
                 "nAvailable": int(hits_in_bucket[buckets].sum()),
-                "theta": float(patterns["pattern_theta"][entry][pattern]),
-                "phi": float(patterns["pattern_phi"][entry][pattern]),
+                "theta": float(pattern_event["pattern_theta"][pattern]),
+                "phi": float(pattern_event["pattern_phi"][pattern]),
                 "eta": float(gpfval.eta_of_theta(
-                    patterns["pattern_theta"][entry][pattern])),
-                "nPhiLayers": int(patterns["pattern_nPhiLayers"][entry][pattern]),
+                    pattern_event["pattern_theta"][pattern])),
+                "nPhiLayers": int(pattern_event["pattern_nPhiLayers"][pattern]),
                 "meanNormResidual2": float(
-                    patterns["pattern_meanNormResidual2"][entry][pattern]),
+                    pattern_event["pattern_meanNormResidual2"][pattern]),
             })
             if main < 0:
                 continue
@@ -342,7 +387,7 @@ def main() -> int:
                 if not belongs:
                     segment = fallback.get(station)
                 content = per_chamber[station]
-                row = row_of_key.get((int(hit_bucket[hit]), int(hit_index[hit])))
+                row = row_of_key(int(hit_bucket[hit]), int(hit_index[hit]))
                 if segment is None or row is None:
                     content["missing"] += 1
                     continue
