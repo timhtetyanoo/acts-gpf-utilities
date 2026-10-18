@@ -20,8 +20,8 @@ The hit counts share the row because they separate a busier event from a slower
 one: `median time per space point (ms)` is flat when the cost per unit of work is unchanged and
 the sample is merely denser.
 
-`aggregate_event_timing.py` summarises the runs, dropping the first event of
-each because it pays for cold caches, and writes the mean and the median. They
+`aggregate_performance.py` summarises the runs, every event included, since the
+one-off GPU setup is timed apart in `initialize`, and writes the mean and the median. They
 differ where a few events are far slower than the rest: the mean is the average
 CPU time per execution that Athena's PerfMon reports, the median is the typical
 event.
@@ -30,8 +30,14 @@ repetition divided by the summed time of the finder calls. It is the inverse of
 the mean time, counts one event after the other and leaves out reading, writing
 and start-up, so it is a figure for the finder and not for the whole job. A
 throughput of a parallel implementation, with many events in flight, is not this
-number. `scripts/compare/compare_timing.py` divides two summaries into
+number. `scripts/compare/compare_performance.py` divides two summaries into
 a speedup.
+
+The summary also has the resources of each repetition: the finder process's
+wall time, CPU cores in use and peak memory from `/usr/bin/time`, and for a GPU
+run the GPU's utilisation, memory, power and SM clock sampled by `nvidia-smi`,
+over the time the GPU was busy. `nvidia-smi` sees the whole GPU, so another job
+on it shows up there; the SM clock tells whether the GPU ran at its full clock.
 
 ## When there is a GPU
 

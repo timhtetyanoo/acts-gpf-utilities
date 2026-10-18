@@ -27,15 +27,23 @@
 # reusing an old timing would report numbers of a different build or load, and
 # the validation of old patterns would no longer belong to them.
 #
-# The analysis of the timing is scripts/run/analyze_timing.sh, which can be run alone.
+# Around each repetition, /usr/bin/time records the finder process's wall time,
+# CPU time and peak memory, and for a GPU run nvidia-smi samples the GPU's
+# utilisation, memory, power and clock every 200 ms. nvidia-smi sees the whole
+# GPU, so another job on it shows up there.
+#
+# The analysis of the performance is scripts/run/analyze_performance.sh, which
+# can be run alone.
 #
 # Writes into results/<name>/:
-#   run_info.txt             what was run: settings, ACTS revision, date
-#   patterns.root            the patterns, the input of step 2
-#   timing/summary.csv       one row per repetition, input of the speedup table
-#   timing/events.csv        every event of every repetition
-#   timing/event_timing.png  cost against occupancy
-#   timing/repetitions/      the raw csv of each repetition
+#   run_info.txt                  what was run: settings, ACTS revision, date
+#   patterns.root                 the patterns, the input of step 2
+#   performance/summary.csv       one row per repetition, input of the comparison
+#   performance/events.csv        every event of every repetition
+#   performance/event_times.png   cost against occupancy
+#   performance/repetitions/      per repetition: timing_rNN.csv of the finder,
+#                                 process_rNN.txt of /usr/bin/time and, on the
+#                                 GPU, gpu_rNN.csv of nvidia-smi
 #   logs/                    finder output of each repetition
 #   profile/                 with GPF_PROFILE: seeds.csv, events.csv and their
 #                            analysis, of the first repetition
@@ -109,7 +117,7 @@ if [[ -e "${run_dir}" ]]; then
   echo "Replacing the earlier run ${name}"
   rm -rf -- "${run_dir}"
 fi
-mkdir -p -- "${run_dir}/timing/repetitions" "${run_dir}/logs"
+mkdir -p -- "${run_dir}/performance/repetitions" "${run_dir}/logs"
 
 # --- what is being run, for the record --------------------------------------
 {
@@ -134,11 +142,23 @@ mkdir -p -- "${run_dir}/timing/repetitions" "${run_dir}/logs"
   echo "started:       $(date '+%F %T')"
 } >"${run_dir}/run_info.txt"
 
+# @brief Ends the GPU sampling of a repetition, if one runs
+sampler=""
+stop_sampler() {
+  if [[ -n "${sampler}" ]]; then
+    kill "${sampler}" 2>/dev/null || true
+    wait "${sampler}" 2>/dev/null || true
+    sampler=""
+  fi
+}
+trap stop_sampler EXIT
+
 # @brief One repetition of the finder; the first one also writes the patterns
 run_cpp() {
   local repetition="$1"
   local tag="r$(printf '%02d' "${repetition}")"
-  local timing="${run_dir}/timing/repetitions/timing_${tag}.csv"
+  local repetitions_dir="${run_dir}/performance/repetitions"
+  local timing="${repetitions_dir}/timing_${tag}.csv"
   local log="${run_dir}/logs/${tag}.log"
   local output=""
   local profile=""
@@ -146,6 +166,12 @@ run_cpp() {
   ((repetition == 1)) && [[ -n "${GPF_PROFILE:-}" ]] && profile="${run_dir}/profile"
 
   echo "Running ${name} ${tag}"
+  if [[ "${backend}" == cuda ]] && command -v nvidia-smi >/dev/null; then
+    nvidia-smi --format=csv,nounits --loop-ms=200 \
+      --query-gpu=timestamp,utilization.gpu,memory.used,power.draw,clocks.sm \
+      >"${repetitions_dir}/gpu_${tag}.csv" 2>/dev/null &
+    sampler=$!
+  fi
   ACTS_GPF_NTUPLE="${ntuple}" \
   ACTS_GPF_GEOMETRY="${geometry}" \
   ACTS_GPF_MAX_EVENTS="$(gpf_event_cap "${events}")" \
@@ -155,12 +181,16 @@ run_cpp() {
   ACTS_GPF_BATCH_SIZE="${GPF_BATCH_SIZE:-}" \
   ACTS_GPF_FIRST_EVENT="${GPF_FIRST_EVENT:-}" \
   ACTS_GPF_PROFILE_DIR="${profile}" \
+    /usr/bin/time --format='%e %U %S %M' \
+    --output="${repetitions_dir}/process_${tag}.txt" \
     "${executable}" --log_level=error --report_level=no --color_output=no \
     >"${log}" 2>&1 || {
+    stop_sampler
     echo "The finder failed in ${tag}; the end of ${log}:" >&2
     tail -n 5 "${log}" >&2
     exit 1
   }
+  stop_sampler
   if [[ ! -f "${timing}" ]]; then
     echo "No timing file was written for ${tag}, see ${log}" >&2
     exit 1
@@ -181,7 +211,7 @@ done
 
 echo
 echo "Collecting"
-"${script_dir}/analyze_timing.sh"
+"${script_dir}/analyze_performance.sh"
 if [[ -n "${GPF_PROFILE:-}" ]]; then
   "${python}" "${script_dir}/../profile/analyze_profile.py" "${run_dir}/profile"
 fi
@@ -190,5 +220,5 @@ echo "finished:      $(date '+%F %T')" >>"${run_dir}/run_info.txt"
 echo
 echo "Run:      ${run_dir}"
 echo "Patterns: ${run_dir}/patterns.root"
-echo "Timing:   ${run_dir}/timing/summary.csv"
+echo "Performance: ${run_dir}/performance/summary.csv"
 echo "Next:     scripts/validation/run_validation.sh --name ${name}"

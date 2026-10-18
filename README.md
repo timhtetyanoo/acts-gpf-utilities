@@ -20,9 +20,10 @@ pattern finder again.
 scripts/
   gpf_common.sh                        shared helpers: flags, config, python, n-tuples
   run/
-    run_finder.sh                      STEP 1: run the finder -> patterns + timing
-    aggregate_event_timing.py          C++ per-event csv -> summary
-    plot_event_timing.py               cost vs occupancy
+    run_finder.sh                      STEP 1: run the finder -> patterns + performance
+    analyze_performance.sh             the performance summary, alone
+    aggregate_performance.py           per-event csv + resources -> summary
+    plot_performance.py                cost vs occupancy
   validation/
     run_validation.sh                  STEP 2: patterns + n-tuple -> metrics and figures
     gpfval.py                          definitions transcribed from ACTS & Athena
@@ -34,7 +35,7 @@ scripts/
     compare_patterns.py                two pattern files, hit by hit
   compare/
     run_compare.sh                     compare two runs and two validations
-    compare_timing.py                  two timing summaries -> speedup table
+    compare_performance.py             two performance summaries -> speedup table
 configs/                               one config per sample and backend; name each run with --name
 results/                               everything the scripts write; only the small summaries are tracked
 docs/
@@ -115,12 +116,13 @@ they can be pushed next to the code and the rest stays local. For any run name:
 
 ```text
 tracked   run_info.txt, validation/scores.csv, validation/metrics.log,
-          validation/plots/*.png, timing/summary.csv, timing/event_timing.png,
+          validation/plots/*.png, performance/summary.csv,
+          performance/event_times.png,
           hough/**/*.pdf
-          compare/<a>_vs_<b>/: patterns.log, scores.csv, speedup.csv,
-          speedup.log, plots/*.png, hough/**/*.pdf
+          compare/<a>_vs_<b>/: patterns.log, scores.csv, performance.csv,
+          performance.log, plots/*.png, hough/**/*.pdf
 ignored   patterns.root, validation/tables/, validation/fastreco.root,
-          timing/events.csv, timing/repetitions/, logs/
+          performance/events.csv, performance/repetitions/, logs/
 ```
 
 That is about 3 MB for a run with the hough plots. The rules are in `.gitignore`;
@@ -133,14 +135,14 @@ results/
   <name>/
     run_info.txt            what was run
     patterns.root           step 1: the finder's output, the input of step 2
-    timing/                 step 1: summary.csv, events.csv, event_timing.png,
-                            repetitions/ (raw)
+    performance/            step 1: summary.csv, events.csv, event_times.png,
+                            repetitions/ (raw times and resources)
     logs/                   step 1: finder output of each repetition
     validation/             step 2: scores.csv, metrics.log, plots/, tables/;
                             step 3: fastreco.root
     hough/                  step 3: the figures of MuonFastRecoValidation
   compare/
-    <reference>_vs_<compare>/   patterns.log, plots/, scores.csv, speedup.csv,
+    <reference>_vs_<compare>/   patterns.log, plots/, scores.csv, performance.csv,
                                 hough/ (step 3 with several runs)
 ```
 
@@ -233,8 +235,8 @@ scripts/compare/run_compare.sh --reference cpu_pg0_all --compare cuda_v2_pg0_all
 ```
 
 Takes two runs by name. The patterns of the two give the hit-by-hit gate, their
-validations the overlaid figures and the metrics, their timings the speedup
-table, all in `results/compare/<reference>_vs_<compare>/`. It runs no finder, and
+validations the overlaid figures and the metrics, their performance the speedup
+and resource table, all in `results/compare/<reference>_vs_<compare>/`. It runs no finder, and
 a part is skipped when one of the runs lacks what it needs. Only compatible runs
 are compared: the same sample, the same n-tuple and the same event count, read
 from the `run_info.txt` of each. Otherwise it stops and says what differs.

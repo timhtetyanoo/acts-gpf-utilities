@@ -14,8 +14,8 @@ __pycache__/
 !/results/**/validation/scores.csv
 !/results/**/validation/metrics.log
 !/results/**/validation/plots/*.png
-!/results/**/timing/summary.csv
-!/results/**/timing/event_timing.png
+!/results/**/performance/summary.csv
+!/results/**/performance/event_times.png
 !/results/**/hough/**/*.pdf
 !/results/**/profile/report.txt
 !/results/**/profile/stages.csv
@@ -23,6 +23,6 @@ __pycache__/
 # a comparison of two runs
 !/results/compare/**/patterns.log
 !/results/compare/**/scores.csv
-!/results/compare/**/speedup.csv
-!/results/compare/**/speedup.log
+!/results/compare/**/performance.csv
+!/results/compare/**/performance.log
 !/results/compare/**/plots/*.png

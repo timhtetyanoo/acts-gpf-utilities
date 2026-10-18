@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Put two timing summaries side by side.
+"""Put two performance summaries side by side.
 
-Reads the `summary.csv` that aggregate_event_timing.py writes for each run,
+Reads the `summary.csv` that aggregate_performance.py writes for each run,
 reduces each to its median over the repetitions and writes one row per measure:
 
     measure | <reference> | <compared> | speedup
@@ -9,7 +9,8 @@ reduces each to its median over the repetitions and writes one row per measure:
 The speedup is the reference divided by the compared value for a time and the
 compared divided by the reference for a throughput, so a number above one always
 means the compared run is faster. The stages of the GPU path are listed when
-both runs have them.
+both runs have them, and the resources each run recorded follow, without a
+speedup.
 """
 
 from __future__ import annotations
@@ -29,6 +30,16 @@ MEASURES = [
     "slowest event (ms)",
     "median time per space point (ms)",
     "throughput (events/s)",
+]
+#: Resources, listed as they are; a run without a GPU has none of the GPU ones
+RESOURCES = [
+    "process wall time (s)",
+    "CPU cores in use by the process (mean)",
+    "peak memory of the process (MiB)",
+    "GPU utilisation while busy (mean %)",
+    "GPU memory used (peak MiB)",
+    "GPU power while busy (mean W)",
+    "GPU SM clock while busy (median MHz)",
 ]
 #: The names of the same columns in summaries written before they were renamed
 OLD_NAMES = {
@@ -68,6 +79,8 @@ def main() -> int:
               if c.endswith("(median ms)") and c in compared.index]
     measures = [m for m in MEASURES
                 if m in reference.index and m in compared.index] + stages
+    resources = [c for c in RESOURCES
+                 if c in reference.index or c in compared.index]
 
     rows = []
     for measure in measures:
@@ -78,6 +91,12 @@ def main() -> int:
                      args.compare_label: float(f"{cmp:.4g}"),
                      f"speedup (above 1: {args.compare_label} is faster)":
                          float(f"{speedup:.3g}")})
+    for measure in resources:
+        ref = reference.get(measure, float("nan"))
+        cmp = compared.get(measure, float("nan"))
+        rows.append({"measure": measure,
+                     args.reference_label: float(f"{ref:.4g}"),
+                     args.compare_label: float(f"{cmp:.4g}")})
     out = pd.DataFrame(rows)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

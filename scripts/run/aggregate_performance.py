@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Summarise the per event timing files written by the C++ data test.
+"""Summarise the performance of a run: the per event timing files written by
+the C++ data test, and the resources the run script recorded.
 
 The test times each call of the pattern finder on its own and writes one row per
 event, in microseconds, with the GPU test adding the time of each stage and what
@@ -15,7 +16,12 @@ they hold:
                and the median and p90 of each of the five stages of the GPU
                path: host before, copy to GPU, kernels, copy back, host after;
                with --logs, also the one-off setup before the first event that
-               the GPU test prints, which no event pays
+               the GPU test prints, which no event pays; and the resources,
+               where they were recorded: the finder process's wall time, CPU
+               cores in use and peak memory (process_rNN.txt of /usr/bin/time),
+               and the GPU's utilisation, memory, power and SM clock
+               (gpu_rNN.csv of nvidia-smi), taken from the first to the last
+               sample in which the GPU was busy
 
 Both the mean and the median are written. They answer different questions and
 differ a lot where a few events are far slower than the rest: the mean is the
@@ -50,6 +56,44 @@ def setup_times(logs: Path | None) -> dict[str, float]:
         if match:
             times[log.stem] = float(match["ms"])
     return times
+
+
+def process_resources(directory: Path) -> dict[str, dict[str, float]]:
+    """Wall time, CPU cores in use and peak memory of each repetition's process"""
+    out = {}
+    for path in sorted(directory.glob("process_r*.txt")):
+        # /usr/bin/time writes '%e %U %S %M' last, after a line on a failure
+        lines = path.read_text().split("\n")
+        fields = [line.split() for line in lines if line.strip()][-1]
+        wall, user, system, rss_kb = (float(v) for v in fields)
+        out[path.stem.removeprefix("process_")] = {
+            "process wall time (s)": wall,
+            "CPU cores in use by the process (mean)":
+                (user + system) / wall if wall > 0 else float("nan"),
+            "peak memory of the process (MiB)": rss_kb / 1024,
+        }
+    return out
+
+
+def gpu_resources(directory: Path) -> dict[str, dict[str, float]]:
+    """Utilisation, memory, power and SM clock of the GPU in each repetition"""
+    out = {}
+    for path in sorted(directory.glob("gpu_r*.csv")):
+        samples = pd.read_csv(path, skipinitialspace=True)
+        if samples.empty:
+            continue
+        samples.columns = [c.split(" [")[0] for c in samples.columns]
+        busy = samples.index[samples["utilization.gpu"] > 0]
+        window = (samples.loc[busy[0]:busy[-1]] if len(busy) else
+                  samples.iloc[0:0])
+        out[path.stem.removeprefix("gpu_")] = {
+            "GPU utilisation while busy (mean %)":
+                window["utilization.gpu"].mean(),
+            "GPU memory used (peak MiB)": samples["memory.used"].max(),
+            "GPU power while busy (mean W)": window["power.draw"].mean(),
+            "GPU SM clock while busy (median MHz)": window["clocks.current.sm"].median(),
+        }
+    return out
 
 
 def read_run(path: Path, name: str) -> pd.DataFrame:
@@ -149,6 +193,15 @@ def main() -> int:
     setups = setup_times(args.logs)
     if setups:
         summary[SETUP_COLUMN] = summary["repetition"].map(setups)
+    resources = process_resources(args.directory)
+    for repetition, values in gpu_resources(args.directory).items():
+        resources.setdefault(repetition, {}).update(values)
+    resource_columns = sorted({c for v in resources.values() for c in v},
+                              key=lambda c: (c.startswith("GPU"), c))
+    for column in resource_columns:
+        summary[column] = summary["repetition"].map(
+            lambda r, c=column: resources.get(r, {}).get(c, float("nan")))
+        summary[column] = summary[column].map(lambda v: float(f"{v:.4g}"))
     # microseconds are the finest the timing files hold
     # four significant digits, so that small times keep their precision
     times = [c for c in summary.columns if "ms" in c]

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Plot the per event timings of the C++ data test.
 
-Two panels, from one or more `events.csv` of aggregate_event_timing.py:
+Two panels, from one or more `events.csv` of aggregate_performance.py:
 
     left   the cost of an event against the hits it holds, which separates a
            busier event from a slower one

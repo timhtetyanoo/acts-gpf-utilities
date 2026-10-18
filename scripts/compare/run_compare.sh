@@ -15,7 +15,8 @@
 #   patterns.log     the patterns, hit by hit (needs both patterns.root)
 #   plots/           the figures of both runs overlaid (needs both validations)
 #   scores.csv       the metrics of both runs side by side, and the difference
-#   speedup.csv      the timing of both runs side by side, and the speedup
+#   performance.csv  the times and resources of both runs side by side, and the
+#                    speedup
 #
 # Only compatible runs are compared: the same sample, the same n-tuple and the
 # same event count, read from run_info.txt of each. Otherwise the two would not
@@ -33,7 +34,7 @@ reference=""
 compared=""
 results_dir="${GPF_RESULTS_DIR:-${repo_root}/results}"
 
-usage() { sed -n '2,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
+usage() { sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
 
 while (($#)); do
   case "$1" in
@@ -81,7 +82,7 @@ fi
 
 # replace what an earlier comparison wrote, and leave hough/, which step 3 writes
 rm -rf -- "${out_dir}/patterns.log" "${out_dir}/plots" "${out_dir}/scores.csv" "${out_dir}/scores.log" \
-  "${out_dir}/speedup.csv" "${out_dir}/speedup.log"
+  "${out_dir}/performance.csv" "${out_dir}/performance.log"
 mkdir -p -- "${out_dir}"
 did_anything=0
 
@@ -117,20 +118,20 @@ if [[ -f "${reference_val}/scores.csv" && -f "${compare_val}/scores.csv" ]]; the
   did_anything=1
 fi
 
-# --- the timing --------------------------------------------------------------
-reference_summary="${reference_dir}/timing/summary.csv"
-compare_summary="${compare_dir}/timing/summary.csv"
+# --- the performance ---------------------------------------------------------
+reference_summary="${reference_dir}/performance/summary.csv"
+compare_summary="${compare_dir}/performance/summary.csv"
 if [[ -f "${reference_summary}" && -f "${compare_summary}" ]]; then
   echo
-  "${python}" "${script_dir}/compare_timing.py" \
+  "${python}" "${script_dir}/compare_performance.py" \
     "${reference_summary}" "${compare_summary}" \
     --reference-label "${reference}" --compare-label "${compared}" \
-    --output "${out_dir}/speedup.csv" | tee -- "${out_dir}/speedup.log"
+    --output "${out_dir}/performance.csv" | tee -- "${out_dir}/performance.log"
   did_anything=1
 fi
 
 if ((! did_anything)); then
-  echo "Nothing to compare: the two runs share no patterns, validation or timing" >&2
+  echo "Nothing to compare: the two runs share no patterns, validation or performance" >&2
   exit 1
 fi
 
