@@ -13,13 +13,15 @@ they hold:
                plotting the cost against the occupancy
   summary.csv  one row per repetition: the mean, median, p90 and slowest event,
                and the median and p90 of each of the five stages of the GPU
-               path: host before, copy to GPU, kernels, copy back, host after
+               path: host before, copy to GPU, kernels, copy back, host after;
+               with --logs, also the one-off setup before the first event that
+               the GPU test prints, which no event pays
 
 Both the mean and the median are written. They answer different questions and
 differ a lot where a few events are far slower than the rest: the mean is the
 total time over the events, which is what Athena's PerfMon reports as the average
-CPU time per execution, and the median is the typical event. The first event of
-each repetition is left out of the summary, since it pays for cold caches.
+CPU time per execution, and the median is the typical event. Every event counts,
+the first included: the one-off setup is timed apart from the events.
 """
 
 from __future__ import annotations
@@ -33,6 +35,21 @@ import pandas as pd
 
 #: timing_r01.csv, as the run script names the repetitions
 NAME = re.compile(r"^timing_(?P<repetition>r\d+)\.csv$")
+#: the line of the GPU test's log that gives its one-off setup
+SETUP = re.compile(r"^Setup time: (?P<ms>[0-9.eE+-]+) ms", re.MULTILINE)
+SETUP_COLUMN = "setup before the first event (ms)"
+
+
+def setup_times(logs: Path | None) -> dict[str, float]:
+    """The setup time of each repetition, from logs/rNN.log, if printed"""
+    times = {}
+    if logs is None:
+        return times
+    for log in sorted(logs.glob("r*.log")):
+        match = SETUP.search(log.read_text(errors="replace"))
+        if match:
+            times[log.stem] = float(match["ms"])
+    return times
 
 
 def read_run(path: Path, name: str) -> pd.DataFrame:
@@ -52,6 +69,8 @@ def main() -> int:
     p.add_argument("directory", type=Path, help="Directory of the timing files")
     p.add_argument("--output-dir", type=Path, required=True)
     p.add_argument("--name", required=True, help="Name of the run")
+    p.add_argument("--logs", type=Path, default=None,
+                   help="Directory of the run's logs, rNN.log")
     args = p.parse_args()
 
     frames = [read_run(path, args.name)
@@ -60,10 +79,6 @@ def main() -> int:
     if not frames:
         raise SystemExit(f"No timing files in {args.directory}")
     events = pd.concat(frames, ignore_index=True)
-
-    # the first event of a run carries the cost of filling cold caches
-    first = events.groupby(["run", "repetition"])["event"].transform("min") \
-        == events["event"]
 
     ms = 1e-3  # microseconds of the raw files to milliseconds
     # the stages of the GPU path, as the timing files name them, in order
@@ -81,7 +96,6 @@ def main() -> int:
         "run": events["run"],
         "repetition": events["repetition"],
         "event": events["event"],
-        "first of the repetition (left out of the summary)": first,
         "space points": events["nSpacePoints"],
         "buckets": events["nBuckets"],
         "patterns": events["nPatterns"],
@@ -104,7 +118,7 @@ def main() -> int:
 
     def describe(group: pd.DataFrame) -> pd.Series:
         time = group["time (ms)"]
-        out = {"events (first left out)": len(group)}
+        out = {"events": len(group)}
         out["mean time per event (ms)"] = time.mean()
         out["median time per event (ms)"] = time.median()
         out["p90 time per event (ms)"] = time.quantile(0.9)
@@ -128,13 +142,15 @@ def main() -> int:
             out["events with an overflow"] = int((group[gpu_columns["overflow"]] != 0).sum())
         return pd.Series(out)
 
-    warm = table[~first]
-    summary = warm.groupby(["run", "repetition"]).apply(
+    summary = table.groupby(["run", "repetition"]).apply(
         describe, include_groups=False).reset_index()
     counts = [c for c in summary.columns
               if c.startswith(("events", "median space points",
                                "median patterns"))]
     summary[counts] = summary[counts].round().astype(int)
+    setups = setup_times(args.logs)
+    if setups:
+        summary[SETUP_COLUMN] = summary["repetition"].map(setups)
     # microseconds are the finest the timing files hold
     # four significant digits, so that small times keep their precision
     times = [c for c in summary.columns if "ms" in c]

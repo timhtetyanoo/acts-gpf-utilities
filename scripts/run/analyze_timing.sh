@@ -35,6 +35,7 @@ if ! compgen -G "${timing_dir}/repetitions/timing_r*.csv" >/dev/null; then
 fi
 
 "${python}" "${script_dir}/aggregate_event_timing.py" \
-  "${timing_dir}/repetitions" --name "${name}" --output-dir "${timing_dir}"
+  "${timing_dir}/repetitions" --name "${name}" --output-dir "${timing_dir}" \
+  --logs "${run_dir}/logs"
 "${python}" "${script_dir}/plot_event_timing.py" \
   "${timing_dir}/events.csv" --output "${timing_dir}/event_timing.png"
