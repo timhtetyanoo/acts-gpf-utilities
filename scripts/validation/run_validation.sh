@@ -2,7 +2,7 @@
 #
 # Step 2 of 2: validates the patterns that step 1 wrote, with the selection and
 # the matching of MuonFastRecoValidation (see scripts/validation/gpfval.py). It never runs the
-# finder: it reads results/<name>/patterns.root and the input n-tuple, and builds
+# finder: it reads results/<host>/<name>/patterns.root and the input n-tuple, and builds
 # the validation tables, the metrics and the figures. Every run redoes every
 # stage: the tables follow from the patterns and the n-tuple, so reusing old ones
 # could only mean tables of an older run.
@@ -14,7 +14,7 @@
 #   run_validation.sh --name cpu_pg0_all
 #   run_validation.sh --config configs/cpu_pg0.conf
 #
-# Writes into results/<name>/validation/:
+# Writes into results/<host>/<name>/validation/:
 #   scores.csv       the metrics
 #   metrics.log      the same, and how they move with the matching ratio
 #   plots/           efficiency, composition, pulls, direction
@@ -27,7 +27,7 @@
 #   GPF_NAME          name of the run                  (required)
 #   GPF_SAMPLE        sample                           (default: from run_info.txt)
 #   GPF_NTUPLE        n-tuple                          (default: from run_info.txt)
-#   GPF_RESULTS_DIR   where the runs are kept          (default: <this repo>/results)
+#   GPF_RESULTS_DIR   where the runs are kept          (default: <this repo>/results/<host>)
 #   GPF_STATION_EFF_THR   a match crosses more than this fraction of the muon's
 #                         stations                     (default: 0.5)
 #   GPF_BENDING_EFF_THR   a match holds more than this fraction of the muon's

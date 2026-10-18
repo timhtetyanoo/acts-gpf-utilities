@@ -37,7 +37,7 @@ scripts/
     run_compare.sh                     compare two runs and two validations
     compare_performance.py             two performance summaries -> speedup table
 configs/                               one config per sample and backend; name each run with --name
-results/                               everything the scripts write; only the small summaries are tracked
+results/<host>/                        everything the scripts write, per machine; only the small summaries are tracked
 docs/
   acts_changes.md                      what this work changed in the ACTS checkout
 ```
@@ -78,7 +78,7 @@ only the label the tables and the plots show.
 
 ## Runs, settings and results
 
-A **run** has a name, and everything it produces goes into `results/<name>/`.
+A **run** has a name, and everything it produces goes into `results/<host>/<name>/`.
 The name is the only thing that tells two runs apart, so give each run one that
 says what it is: `cpu_pg0_all`, `cuda_v2_pg200_500ev`. A config file holds one run:
 
@@ -111,8 +111,11 @@ scripts/validation/run_validation.sh --name cpu_pg0_quick
 A config is plain bash assignments. The flags and the variable each one sets are
 listed in `scripts/gpf_common.sh`, and `--help` prints the header of a script.
 
-`results/` is ignored by git except for the small files that summarise a run, so
-they can be pushed next to the code and the rest stays local. For any run name:
+Each machine writes into its own folder, `results/<host>/`, named by its short
+host name (`GPF_HOST` names another), so the results of several machines can
+sit in one repository. `results/` is ignored by git except for the small files
+that summarise a run, so they can be pushed next to the code and the rest stays
+local. For any run name:
 
 ```text
 tracked   run_info.txt, validation/scores.csv, validation/metrics.log,
@@ -131,7 +134,7 @@ settings, the ACTS branch and revision, the build and the date, which is what a
 result is quoted with.
 
 ```text
-results/
+results/<host>/
   <name>/
     run_info.txt            what was run
     patterns.root           step 1: the finder's output, the input of step 2
@@ -149,8 +152,8 @@ results/
 ## Two steps
 
 ```text
-STEP 1  scripts/run/run_finder.sh             run the finder     -> results/<name>/
-STEP 2  scripts/validation/run_validation.sh  judge the patterns -> results/<name>/validation/
+STEP 1  scripts/run/run_finder.sh             run the finder     -> results/<host>/<name>/
+STEP 2  scripts/validation/run_validation.sh  judge the patterns -> results/<host>/<name>/validation/
 ```
 
 Step 1 is the only place the finder runs. Step 2 reads what step 1 wrote and
@@ -186,9 +189,9 @@ is wanted.
 scripts/validation/run_validation.sh --name cpu_pg0_all
 ```
 
-Reads `results/<name>/patterns.root` and the input n-tuple (named in
+Reads `results/<host>/<name>/patterns.root` and the input n-tuple (named in
 `run_info.txt`) and writes tables, `scores.csv` and the physics plots into
-`results/<name>/validation/`.
+`results/<host>/<name>/validation/`.
 
 ### Step 3 (optional): the plotting package
 
@@ -209,8 +212,8 @@ cd ~/cern/acts-gpf-utilities
 scripts/validation/run_hough_plots.sh cpu_pg0_all
 ```
 
-One name writes into `results/<name>/hough/`. Several names draw one curve each
-and write into `results/compare/<first>_vs_<second>/hough/`; they have to be of
+One name writes into `results/<host>/<name>/hough/`. Several names draw one curve each
+and write into `results/<host>/compare/<first>_vs_<second>/hough/`; they have to be of
 the same sample, n-tuple and event count, as for `run_compare.sh`:
 
 ```bash
@@ -236,7 +239,7 @@ scripts/compare/run_compare.sh --reference cpu_pg0_all --compare cuda_v2_pg0_all
 
 Takes two runs by name. The patterns of the two give the hit-by-hit gate, their
 validations the overlaid figures and the metrics, their performance the speedup
-and resource table, all in `results/compare/<reference>_vs_<compare>/`. It runs no finder, and
+and resource table, all in `results/<host>/compare/<reference>_vs_<compare>/`. It runs no finder, and
 a part is skipped when one of the runs lacks what it needs. Only compatible runs
 are compared: the same sample, the same n-tuple and the same event count, read
 from the `run_info.txt` of each. Otherwise it stops and says what differs.
@@ -246,8 +249,8 @@ The stages inside step 2, which can also be run one by one on the files of a run
 ### 1. The validation tables
 
 ```bash
-scripts/validation/build_validation_tables.py results/cpu_pg0_all/patterns.root \
-  data/ParticleGun_MU0.root results/cpu_pg0_all/validation/tables
+scripts/validation/build_validation_tables.py results/<host>/cpu_pg0_all/patterns.root \
+  data/ParticleGun_MU0.root results/<host>/cpu_pg0_all/validation/tables
 ```
 
 Three parquet tables. Nothing is extracted that no test consumes, and no
@@ -267,7 +270,7 @@ point tree it reads 8. What each test needs and why is in
 ### 2. The metrics
 
 ```bash
-scripts/validation/compute_metrics.py results/cpu_pg0_all/validation/tables \
+scripts/validation/compute_metrics.py results/<host>/cpu_pg0_all/validation/tables \
   --sample PG0 --implementation cpu_pg0_all --scan --output scores.csv
 ```
 
@@ -279,8 +282,8 @@ pattern's hits, both at 0.5. `--scan` shows how the numbers move with it.
 ### 3. The figures
 
 ```bash
-scripts/validation/make_plots.py results/cpu_pg0_all/validation/tables \
-  results/cuda_v2_pg0_all/validation/tables \
+scripts/validation/make_plots.py results/<host>/cpu_pg0_all/validation/tables \
+  results/<host>/cuda_v2_pg0_all/validation/tables \
   --labels cpu_pg0_all cuda_v2_pg0_all --output-dir plots
 ```
 
@@ -300,8 +303,8 @@ overlaid, which is how CUDA is compared with the CPU reference.
 ### 4. Comparison of two pattern files
 
 ```bash
-scripts/validation/compare_patterns.py results/cpu_pg0_all/patterns.root \
-  results/cuda_v2_pg0_all/patterns.root
+scripts/validation/compare_patterns.py results/<host>/cpu_pg0_all/patterns.root \
+  results/<host>/cuda_v2_pg0_all/patterns.root
 ```
 
 Two runs over the same space points, compared. Nothing in it knows which
@@ -421,7 +424,7 @@ which the pattern does not estimate.
 
 ## Reproducibility
 
-`results/<name>/run_info.txt` records the settings of a run, the n-tuple, the
+`results/<host>/<name>/run_info.txt` records the settings of a run, the n-tuple, the
 build, the ACTS branch and revision (with a note when the checkout had local
 changes), the revision of this repository, the machine, the GPU and the dates.
 Quote it with any published number, and add the build configuration, which it

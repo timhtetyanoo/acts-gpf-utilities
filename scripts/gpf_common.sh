@@ -2,7 +2,9 @@
 
 # @brief Settings from flags and from a config file, for the runners
 #
-# A run has a name, and everything it produces goes into results/<name>/. The
+# A run has a name, and everything it produces goes into results/<host>/<name>/,
+# <host> being the machine's short host name, so that the runs of several machines
+# can sit in one repository. The
 # name and the other settings are environment variables. A flag, a line in a
 # --config file and the variable itself all set the same thing; where they
 # disagree the order is
@@ -20,7 +22,7 @@
 #
 # Flags (a script ignores the ones that mean nothing to it):
 #   --config FILE            file of settings
-#   --name NAME              name of the run, its folder in results/   GPF_NAME
+#   --name NAME              name of the run, its folder               GPF_NAME
 #   --sample NAME            label of the input, e.g. PG0, PG200       GPF_SAMPLE
 #   --ntuple FILE            space point n-tuple                       GPF_NTUPLE
 #   --events N|all           events per repetition                     GPF_EVENTS
@@ -33,6 +35,7 @@
 #   --source-dir DIR         ACTS source tree                          ACTS_SOURCE_DIR
 #   --geometry FILE          tracking geometry json                    GPF_GEOMETRY
 #   --results-dir DIR        where the runs are kept                   GPF_RESULTS_DIR
+#                            (default: results/<host>; GPF_HOST names another <host>)
 #   --station-eff-thr X      a match crosses more than this fraction of the
 #                            muon's stations                           GPF_STATION_EFF_THR
 #   --bending-eff-thr X      a match holds more than this fraction of the
@@ -96,7 +99,16 @@ gpf_parse_args() {
   export GPF_SETTINGS_RESOLVED=1
 }
 
-# @brief The folder of a run: results/<name>
+# @brief The folder of this machine's runs: results/<host>
+#
+# GPF_HOST names another <host> than the short host name; GPF_RESULTS_DIR
+# replaces the whole path.
+# @param $1 repository root
+gpf_results_dir() {
+  printf '%s' "${GPF_RESULTS_DIR:-$1/results/${GPF_HOST:-$(hostname -s)}}"
+}
+
+# @brief The folder of a run: results/<host>/<name>
 #
 # The name is the only thing that tells two runs apart, so it has to be given and
 # has to be a plain word.
@@ -111,7 +123,7 @@ gpf_run_dir() {
     echo "The run name '${name}' may only hold letters, digits, _ . and -." >&2
     exit 2
   fi
-  printf '%s/%s' "${GPF_RESULTS_DIR:-$1/results}" "${name}"
+  printf '%s/%s' "$(gpf_results_dir "$1")" "${name}"
 }
 
 # @brief Value for ACTS_GPF_MAX_EVENTS: the count itself, or nothing for "all"

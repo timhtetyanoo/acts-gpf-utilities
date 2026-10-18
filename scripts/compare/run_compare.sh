@@ -9,9 +9,9 @@
 #
 #   --reference NAME     the run the other is measured against
 #   --compare NAME       the run compared with it
-#   --results-dir DIR    where the runs are kept (default: <this repo>/results)
+#   --results-dir DIR    where the runs are kept (default: <this repo>/results/<host>)
 #
-# Writes into results/compare/<reference>_vs_<compare>/:
+# Writes into results/<host>/compare/<reference>_vs_<compare>/:
 #   patterns.log     the patterns, hit by hit (needs both patterns.root)
 #   plots/           the figures of both runs overlaid (needs both validations)
 #   scores.csv       the metrics of both runs side by side, and the difference
@@ -32,7 +32,7 @@ source "${script_dir}/../gpf_common.sh"
 
 reference=""
 compared=""
-results_dir="${GPF_RESULTS_DIR:-${repo_root}/results}"
+results_dir="$(gpf_results_dir "${repo_root}")"
 
 usage() { sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
 

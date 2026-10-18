@@ -16,15 +16,17 @@
 #   asetup --restore
 #   source <platform>/setup.sh          # e.g. x86_64-el9-gcc15-opt/setup.sh
 #
-# The python3 of that shell writes the n-tuple: the release has ROOT, numpy,
-# pandas and pyarrow. PYTHON names another interpreter.
+# The n-tuple is written with the python3 of that shell when it has ROOT, numpy,
+# pandas and pyarrow (PYTHON names another interpreter). A release without
+# pyarrow writes it in a clean shell set up with env_setup.sh next to this
+# repository (GPF_ENV_SETUP names another setup script).
 #
-# One name writes into results/<name>/hough/, several into
-# results/compare/<first>_vs_<second>.../hough/. Several runs have to be of the
+# One name writes into results/<host>/<name>/hough/, several into
+# results/<host>/compare/<first>_vs_<second>.../hough/. Several runs have to be of the
 # same sample, n-tuple and event count, as for run_compare.sh. Each run is
 # replaced, not added to.
 #
-#   --results-dir DIR    where the runs are kept (default: <this repo>/results)
+#   --results-dir DIR    where the runs are kept (default: <this repo>/results/<host>)
 #   --sample-name TEXT   text of the plots' header (default: the sample of the run)
 #
 # Writes Efficiency/, Means/, Resolutions/ and dist/ below the output folder. The
@@ -35,12 +37,14 @@ set -Eeuo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/../.." && pwd)"
+# shellcheck source=../gpf_common.sh
+source "${script_dir}/../gpf_common.sh"
 
 names=()
-results_dir="${GPF_RESULTS_DIR:-${repo_root}/results}"
+results_dir="$(gpf_results_dir "${repo_root}")"
 sample_text=""
 
-usage() { sed -n '2,33p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
+usage() { sed -n '2,34p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
 
 while (($#)); do
   case "$1" in
@@ -64,11 +68,7 @@ fi
 info() { sed -n "s/^$2: *//p" "$1/run_info.txt" 2>/dev/null | head -n 1; }
 
 python="${PYTHON:-python3}"
-if ! "${python}" -c 'import ROOT, numpy, pandas, pyarrow' >/dev/null 2>&1; then
-  echo "${python} cannot import ROOT, numpy, pandas and pyarrow." >&2
-  echo "Set up Athena as in --help, or point PYTHON at an interpreter that has them." >&2
-  exit 1
-fi
+env_setup="${GPF_ENV_SETUP:-${repo_root}/../env_setup.sh}"
 
 results_dir="$(cd -- "${results_dir}" && pwd)"
 inputs=()
@@ -115,7 +115,19 @@ for name in "${names[@]}"; do
   tuple="${results_dir}/${name}/validation/fastreco.root"
   if [[ ! -f "${tuple}" || "${tables}/patterns.parquet" -nt "${tuple}" \
         || "${tables}/muons.parquet" -nt "${tuple}" ]]; then
-    "${python}" "${script_dir}/to_fastreco_tuple.py" "${tables}" "${tuple}"
+    if "${python}" -c 'import ROOT, numpy, pandas, pyarrow' >/dev/null 2>&1; then
+      "${python}" "${script_dir}/to_fastreco_tuple.py" "${tables}" "${tuple}"
+    elif [[ -f "${env_setup}" ]]; then
+      echo "Writing the n-tuple of ${name} in a shell set up with ${env_setup}"
+      env -i HOME="${HOME}" USER="${USER}" TERM=dumb PATH=/usr/bin:/bin \
+        bash -c 'source "$1" >/dev/null 2>&1 && python3 "$2" "$3" "$4"' _ \
+        "${env_setup}" "${script_dir}/to_fastreco_tuple.py" "${tables}" "${tuple}"
+    else
+      echo "${name} needs its n-tuple written: ${python} cannot import ROOT, numpy," >&2
+      echo "pandas and pyarrow, and there is no ${env_setup}. Give GPF_ENV_SETUP" >&2
+      echo "or point PYTHON at an interpreter that has them." >&2
+      exit 1
+    fi
   fi
 done
 

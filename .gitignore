@@ -7,7 +7,8 @@ __pycache__/
 
 # results/: everything is ignored except the small files that summarise a run,
 # so that they can be pushed next to the code. The patterns, the tables, the
-# tuples, the raw timings and the logs stay local.
+# tuples, the raw timings and the logs stay local. Each machine has its folder,
+# results/<host>/, so the runs of several machines can be pushed side by side.
 /results/**
 !/results/**/
 !/results/**/run_info.txt
@@ -21,8 +22,8 @@ __pycache__/
 !/results/**/profile/stages.csv
 !/results/**/profile/*.png
 # a comparison of two runs
-!/results/compare/**/patterns.log
-!/results/compare/**/scores.csv
-!/results/compare/**/performance.csv
-!/results/compare/**/performance.log
-!/results/compare/**/plots/*.png
+!/results/*/compare/**/patterns.log
+!/results/*/compare/**/scores.csv
+!/results/*/compare/**/performance.csv
+!/results/*/compare/**/performance.log
+!/results/*/compare/**/plots/*.png

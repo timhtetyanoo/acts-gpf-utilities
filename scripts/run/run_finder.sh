@@ -4,7 +4,7 @@
 # Step 2, scripts/validation/run_validation.sh, judges the patterns written here
 # and never runs the finder.
 #
-# A run has a name, and everything it produces goes into results/<name>/. The
+# A run has a name, and everything it produces goes into results/<host>/<name>/. The
 # name, the sample, the event count and the build to use are what a config file
 # of one run holds:
 #
@@ -35,7 +35,7 @@
 # The analysis of the performance is scripts/run/analyze_performance.sh, which
 # can be run alone.
 #
-# Writes into results/<name>/:
+# Writes into results/<host>/<name>/:
 #   run_info.txt                  what was run: settings, ACTS revision, date
 #   patterns.root                 the patterns, the input of step 2
 #   performance/summary.csv       one row per repetition, input of the comparison
@@ -63,7 +63,7 @@
 #   GPF_BATCH_SIZE    seeds built at once on the GPU   (default: the algorithm's)
 #   ACTS_SOURCE_DIR   ACTS source tree                 (default: <this repo>/../acts)
 #   ACTS_BUILD_DIR    build directory                  (default: ${ACTS_SOURCE_DIR}/build)
-#   GPF_RESULTS_DIR   where the runs are kept          (default: <this repo>/results)
+#   GPF_RESULTS_DIR   where the runs are kept          (default: <this repo>/results/<host>)
 #   PYTHON            interpreter for the analysis     (default: python3 of the shell)
 
 set -Eeuo pipefail

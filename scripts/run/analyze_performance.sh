@@ -7,13 +7,13 @@
 #   analyze_performance.sh --name cpu_pg0_all
 #   analyze_performance.sh --config configs/cpu_pg0.conf
 #
-# Reads  results/<name>/performance/repetitions/: timing_r*.csv, and process_r*.txt
+# Reads  results/<host>/<name>/performance/repetitions/: timing_r*.csv, and process_r*.txt
 #        and gpu_r*.csv where they were recorded
-# Writes results/<name>/performance/summary.csv, events.csv and event_times.png
+# Writes results/<host>/<name>/performance/summary.csv, events.csv and event_times.png
 #
 # Settings (flags are listed in scripts/gpf_common.sh):
 #   GPF_NAME          name of the run                  (required)
-#   GPF_RESULTS_DIR   where the runs are kept          (default: <this repo>/results)
+#   GPF_RESULTS_DIR   where the runs are kept          (default: <this repo>/results/<host>)
 #   PYTHON            interpreter for the analysis     (default: python3 of the shell)
 
 set -Eeuo pipefail
