@@ -61,6 +61,9 @@
 #                     build, -DACTS_GPF_PROFILE on the gpf-profiling branch
 #   GPF_BACKEND       cpu or cuda                      (default: cpu)
 #   GPF_BATCH_SIZE    seeds built at once on the GPU   (default: the algorithm's)
+#   GPF_SEED_FROM_MDT 1: MDT hits seed too             (default: 0)
+#   GPF_SEED_FROM_INNER 1: the inner station seeds too, besides the middle and
+#                     outer ones                       (default: 0)
 #   ACTS_SOURCE_DIR   ACTS source tree                 (default: <this repo>/../acts)
 #   ACTS_BUILD_DIR    build directory                  (default: ${ACTS_SOURCE_DIR}/build)
 #   GPF_RESULTS_DIR   where the runs are kept          (default: <this repo>/results/<host>)
@@ -131,6 +134,8 @@ mkdir -p -- "${run_dir}/performance/repetitions" "${run_dir}/logs"
   [[ -n "${GPF_PROFILE:-}" ]] && echo "profile:       yes"
   echo "backend:       ${backend}"
   [[ "${backend}" == cuda ]] && echo "batch size:    ${GPF_BATCH_SIZE:-default}"
+  echo "mdt seeds:     ${GPF_SEED_FROM_MDT:-0}"
+  echo "inner seeds:   ${GPF_SEED_FROM_INNER:-0}"
   echo "build:         ${build_dir}"
   echo "executable:    ${executable} ($(date -r "${executable}" '+%F %T'))"
   echo "acts branch:   $(git -C "${source_dir}" branch --show-current 2>/dev/null || echo unknown)"
@@ -179,6 +184,8 @@ run_cpp() {
   ACTS_GPF_OUTPUT="${output}" \
   ACTS_GPF_LOG_LEVEL=WARNING \
   ACTS_GPF_BATCH_SIZE="${GPF_BATCH_SIZE:-}" \
+  ACTS_GPF_SEED_FROM_MDT="${GPF_SEED_FROM_MDT:-}" \
+  ACTS_GPF_SEED_FROM_INNER="${GPF_SEED_FROM_INNER:-}" \
   ACTS_GPF_FIRST_EVENT="${GPF_FIRST_EVENT:-}" \
   ACTS_GPF_PROFILE_DIR="${profile}" \
     /usr/bin/time --format='%e %U %S %M' \

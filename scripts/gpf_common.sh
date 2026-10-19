@@ -31,6 +31,8 @@
 #   --repetitions N          timing repetitions                        GPF_REPETITIONS
 #   --backend cpu|cuda       where the finder runs                     GPF_BACKEND
 #   --batch-size N           seeds built at once on the GPU            GPF_BATCH_SIZE
+#   --seed-from-mdt          MDT hits seed too                         GPF_SEED_FROM_MDT
+#   --seed-from-inner        the inner station seeds too               GPF_SEED_FROM_INNER
 #   --build-dir DIR          ACTS build directory                      ACTS_BUILD_DIR
 #   --source-dir DIR         ACTS source tree                          ACTS_SOURCE_DIR
 #   --geometry FILE          tracking geometry json                    GPF_GEOMETRY
@@ -60,6 +62,8 @@ gpf_parse_args() {
       --repetitions) flags[GPF_REPETITIONS]="${2:?}"; shift ;;
       --backend) flags[GPF_BACKEND]="${2:?--backend needs cpu or cuda}"; shift ;;
       --batch-size) flags[GPF_BATCH_SIZE]="${2:?}"; shift ;;
+      --seed-from-mdt) flags[GPF_SEED_FROM_MDT]=1 ;;
+      --seed-from-inner) flags[GPF_SEED_FROM_INNER]=1 ;;
       --build-dir) flags[ACTS_BUILD_DIR]="${2?}"; shift ;;
       --source-dir) flags[ACTS_SOURCE_DIR]="${2:?}"; shift ;;
       --geometry) flags[GPF_GEOMETRY]="${2:?}"; shift ;;
