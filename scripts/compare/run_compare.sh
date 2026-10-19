@@ -17,6 +17,9 @@
 #   scores.csv       the metrics of both runs side by side, and the difference
 #   performance.csv  the times and resources of both runs side by side, and the
 #                    speedup
+#   event_times.png  the time of each event against its occupancy for both runs,
+#                    and the speedup per occupancy bin (needs both events.csv)
+#   stages.png       where the time of an event goes, for both runs
 #
 # Only compatible runs are compared: the same sample, the same n-tuple and the
 # same event count, read from run_info.txt of each. Otherwise the two would not
@@ -34,7 +37,7 @@ reference=""
 compared=""
 results_dir="$(gpf_results_dir "${repo_root}")"
 
-usage() { sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
+usage() { sed -n '2,27p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
 
 while (($#)); do
   case "$1" in
@@ -82,7 +85,7 @@ fi
 
 # replace what an earlier comparison wrote, and leave hough/, which step 3 writes
 rm -rf -- "${out_dir}/patterns.log" "${out_dir}/plots" "${out_dir}/scores.csv" "${out_dir}/scores.log" \
-  "${out_dir}/performance.csv" "${out_dir}/performance.log"
+  "${out_dir}/performance.csv" "${out_dir}/performance.log" "${out_dir}/event_times.png" "${out_dir}/stages.png"
 mkdir -p -- "${out_dir}"
 did_anything=0
 
@@ -127,6 +130,16 @@ if [[ -f "${reference_summary}" && -f "${compare_summary}" ]]; then
     "${reference_summary}" "${compare_summary}" \
     --reference-label "${reference}" --compare-label "${compared}" \
     --output "${out_dir}/performance.csv" | tee -- "${out_dir}/performance.log"
+  did_anything=1
+fi
+reference_events="${reference_dir}/performance/events.csv"
+compare_events="${compare_dir}/performance/events.csv"
+if [[ -f "${reference_events}" && -f "${compare_events}" ]]; then
+  "${python}" "${script_dir}/../run/plot_performance.py" \
+    "${reference_events}" "${compare_events}" \
+    --pair "${reference}" "${compared}" --output "${out_dir}/event_times.png"
+  "${python}" "${script_dir}/../run/plot_stages.py" \
+    "${reference_events}" "${compare_events}" --output "${out_dir}/stages.png"
   did_anything=1
 fi
 

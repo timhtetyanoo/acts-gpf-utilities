@@ -23,7 +23,8 @@ scripts/
     run_finder.sh                      STEP 1: run the finder -> patterns + performance
     analyze_performance.sh             the performance summary, alone
     aggregate_performance.py           per-event csv + resources -> summary
-    plot_performance.py                cost vs occupancy
+    plot_performance.py                cost vs occupancy, and the speedup of one run over another
+    plot_stages.py                     where the time of an event goes, per stage of the GPU path
   validation/
     run_validation.sh                  STEP 2: patterns + n-tuple -> metrics and figures
     gpfval.py                          definitions transcribed from ACTS & Athena
@@ -120,10 +121,10 @@ local. For any run name:
 ```text
 tracked   run_info.txt, validation/scores.csv, validation/metrics.log,
           validation/plots/*.png, performance/summary.csv,
-          performance/event_times.png,
+          performance/event_times.png, performance/stages.png,
           hough/**/*.pdf
           compare/<a>_vs_<b>/: patterns.log, scores.csv, performance.csv,
-          performance.log, plots/*.png, hough/**/*.pdf
+          performance.log, event_times.png, stages.png, plots/*.png, hough/**/*.pdf
 ignored   patterns.root, validation/tables/, validation/fastreco.root,
           performance/events.csv, performance/repetitions/, logs/
 ```
@@ -138,7 +139,7 @@ results/<host>/
   <name>/
     run_info.txt            what was run
     patterns.root           step 1: the finder's output, the input of step 2
-    performance/            step 1: summary.csv, events.csv, event_times.png,
+    performance/            step 1: summary.csv, events.csv, event_times.png, stages.png,
                             repetitions/ (raw times and resources)
     logs/                   step 1: finder output of each repetition
     validation/             step 2: scores.csv, metrics.log, plots/, tables/;
@@ -146,6 +147,7 @@ results/<host>/
     hough/                  step 3: the figures of MuonFastRecoValidation
   compare/
     <reference>_vs_<compare>/   patterns.log, plots/, scores.csv, performance.csv,
+                                event_times.png, stages.png,
                                 hough/ (step 3 with several runs)
 ```
 

@@ -17,6 +17,7 @@ __pycache__/
 !/results/**/validation/plots/*.png
 !/results/**/performance/summary.csv
 !/results/**/performance/event_times.png
+!/results/**/performance/stages.png
 !/results/**/hough/**/*.pdf
 !/results/**/profile/report.txt
 !/results/**/profile/stages.csv
@@ -27,3 +28,5 @@ __pycache__/
 !/results/*/compare/**/performance.csv
 !/results/*/compare/**/performance.log
 !/results/*/compare/**/plots/*.png
+!/results/*/compare/**/event_times.png
+!/results/*/compare/**/stages.png

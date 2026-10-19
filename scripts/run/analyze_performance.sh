@@ -9,7 +9,8 @@
 #
 # Reads  results/<host>/<name>/performance/repetitions/: timing_r*.csv, and process_r*.txt
 #        and gpu_r*.csv where they were recorded
-# Writes results/<host>/<name>/performance/summary.csv, events.csv and event_times.png
+# Writes results/<host>/<name>/performance/summary.csv, events.csv and event_times.png,
+#        and stages.png for a run that timed the stages of the GPU path
 #
 # Settings (flags are listed in scripts/gpf_common.sh):
 #   GPF_NAME          name of the run                  (required)
@@ -40,3 +41,7 @@ fi
   --output-dir "${performance_dir}" --logs "${run_dir}/logs"
 "${python}" "${script_dir}/plot_performance.py" \
   "${performance_dir}/events.csv" --output "${performance_dir}/event_times.png"
+if head -n 1 "${performance_dir}/events.csv" | grep -q "GPU kernels"; then
+  "${python}" "${script_dir}/plot_stages.py" \
+    "${performance_dir}/events.csv" --output "${performance_dir}/stages.png"
+fi
