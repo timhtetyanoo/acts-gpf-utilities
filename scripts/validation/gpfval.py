@@ -105,6 +105,60 @@ def direction(phi_degrees, theta_degrees):
                      np.cos(theta)], axis=-1)
 
 
+def chi2_term(line_position, line_direction, hits):
+    """Spatial chi2 of each hit to a line, CompSpacePointAuxiliaries::chi2Term.
+
+    The overload without a time offset, transcribed term by term. `hits` holds
+    one array per quantity of MuonSpacePoint, all in the frame of the line:
+    `position`, `sensor` and `to_next` as (n, 3), `cov_non_bending` and
+    `cov_bending` (covariance()[0] and [1]), `drift`, `straw`, `measures_eta`
+    and `measures_phi` as (n,). A tube contributes the drift-circle residual
+    and, when it measures phi, the distance along the wire; a strip contributes
+    the distance on its plane, decomposed along the two strip directions when
+    it measures both.
+    """
+    eps = 3 * np.finfo(float).eps
+    pos, sensor, to_next = hits["position"], hits["sensor"], hits["to_next"]
+    cov0, cov1 = hits["cov_non_bending"], hits["cov_bending"]
+    line_position = np.asarray(line_position, dtype=float)
+    line_direction = np.asarray(line_direction, dtype=float)
+    chi2 = np.full(len(pos), np.nan)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        # tubes: LineHelper::signedDistance and lineIntersect against the wire
+        dots = sensor @ line_direction
+        a_minus_b = line_position - pos
+        parallel = np.abs(dots - 1.0) < np.finfo(float).eps
+        project = line_direction - dots[:, None] * sensor
+        project /= np.linalg.norm(project, axis=1)[:, None]
+        distance = np.einsum("ij,ij->i", np.cross(a_minus_b, sensor), project)
+        along = a_minus_b - (a_minus_b @ line_direction)[:, None] * line_direction
+        distance = np.where(parallel, np.linalg.norm(along, axis=1), distance)
+        tube = (np.abs(distance) - hits["drift"]) ** 2 / cov1
+        path = ((np.einsum("ij,ij->i", a_minus_b, sensor)
+                 - (a_minus_b @ line_direction) * dots) / (1.0 - dots ** 2))
+        tube = np.where(hits["measures_phi"], tube + path ** 2 / cov0, tube)
+
+        # strips: the line extrapolated onto the plane of the hit
+        normal = np.cross(sensor, to_next)
+        normal /= np.linalg.norm(normal, axis=1)[:, None]
+        reach = (np.einsum("ij,ij->i", normal, pos - line_position)
+                 / (normal @ line_direction))
+        on_plane = line_position + reach[:, None] * line_direction - pos
+        d0 = np.einsum("ij,ij->i", on_plane, to_next)
+        d1 = np.einsum("ij,ij->i", on_plane, sensor)
+        angle = np.einsum("ij,ij->i", to_next, sensor)
+        inverse = 1.0 / (1.0 - angle ** 2)
+        both = ((inverse * (d0 - angle * d1)) ** 2 / cov1
+                + (inverse * (d1 - angle * d0)) ** 2 / cov0)
+        phi_only = d0 ** 2 / cov0
+        eta_only = d0 ** 2 / cov1 + np.where(cov0 > eps, d1 ** 2 / cov0, 0.0)
+        strip = np.where(hits["measures_eta"] & hits["measures_phi"], both,
+                         np.where(hits["measures_phi"], phi_only, eta_only))
+
+        chi2 = np.where(hits["straw"], tube, strip)
+    return chi2
+
+
 def station_index(station_name):
     """Station of a chamber, MuonStationIndex::toStationIndex(ChIndex).
 

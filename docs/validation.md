@@ -73,20 +73,31 @@ A change there has to be made here as well, or the two stop agreeing.
 | quantity | source |
 | --- | --- |
 | the truth muons | `Muons_*` of the `MuonTruth` tree, one row per muon |
-| the hits a muon left per station | its identifiers (`Segments_hitGeoIds`) that produced a space point in that event, split into precision, trigger eta and phi |
+| the hits a muon left per station | the hits its truth segments claim (below), split into precision, trigger eta and phi |
 | the hits of a pattern per station | `hit_station` and the muon identifier of its hits |
-| the truth hits of a pattern per station | those of its hits whose identifier is one of the muon's |
+| the truth hits of a pattern per station | those of its hits the muon's segments claim |
 
 Nothing else is used. The efficiency does not touch the tracking geometry.
 
-### Why the truth is counted in identifiers
+### Which hits are the muon's
 
 Athena matches a measurement to a truth particle through the sim hit behind it,
-a link the export does not carry. The substitute is the surface: a hit belongs to
-a muon when its identifier is one of the identifiers of that muon's truth
-segments, which `TruthSegmentWriter` fills with the surfaces of exactly those sim
-hits. Counting distinct identifiers also reproduces Athena's deduplication for
-free, since a strip identifier is a gas gap and an MDT identifier a tube.
+a link the export does not carry. What the export has is the truth segments:
+each lists the surfaces of its sim hits (`Segments_hitGeoIds`, filled by
+`TruthSegmentWriter`) and carries its line (`Segments_localSegPars`).
+
+On each surface a segment lists, the segment claims the hit closest to its
+line, measured with the Core's own `CompSpacePointAuxiliaries::chi2Term`
+(transcribed as `gpfval.chi2_term`), separately for each measured direction: one
+eta hit, one phi hit and one hit measuring both. An MDT surface is one tube and a
+strip surface one gas gap, so the truth holds one hit per tube and one per gas
+gap and direction. A hit two segments claim goes to the one it is closer to.
+
+A segment's line and its surfaces belong together: on PG200 the hits on a
+segment's surfaces have a median chi2 of 1.3 to its own line and 1.7e7 to its
+neighbour's. For a tube measuring eta only, `chi2_term` equals the square of
+test 3's pull to 1e-10. The claimed hit has a median chi2 near 1 for every
+technology.
 
 ### How it is presented
 
@@ -108,11 +119,19 @@ hits were its own, in two stations (ACTS's `TrackTruthMatcher`). That criterion
 is gone. Numbers from runs made before the change are not comparable with the
 ones made after it.
 
+Earlier versions also took every hit on a surface the muon crossed as the
+muon's; now only the closest hit per surface and direction is. On 2,000 PG200
+events this lowers the efficiency from 0.985 to 0.975, purity from 0.94 to 0.90
+and completeness from 0.85 to 0.80, for the CPU and the GPU alike. Tables built
+before the change have to be built again.
+
 ### What it cannot tell you
 
-- **A wrong hit on a right surface counts as found.** An identifier is one tube
-  for an MDT but a whole gas gap for a strip chamber, so a pattern holding the
-  wrong strip of the right gap is indistinguishable here. Test 3 exists for that.
+- **When the muon left no hit on a surface, the closest other hit is claimed.**
+  The surfaces come from sim hits, so the muon crossed them, but a dead or
+  inefficient channel leaves no digit and the nearest hit of someone else takes
+  its place. The tail of the claimed chi2 shows how often: on PG200, above 25
+  for 1.5% of the MDT hits, 16% of the RPC hits and 8% of the sTGC hits.
 - **It says nothing about what else the pattern picked up.** A pattern
   containing the whole muon and fifty stray hits is fully efficient. That is
   purity's job.
@@ -181,7 +200,7 @@ can be read against the hits it could have taken.
 | quantity | source |
 | --- | --- |
 | a pattern's hits | `hit_geometryId` and `hit_patternIdx` |
-| which muon a hit belongs to | its identifier looked up in each muon's set, as in test 1 |
+| which muon a hit belongs to | the segment that claims it, as in test 1 |
 | the buckets a pattern touched | `hit_bucketId` |
 | the hits available in those buckets | `spacePoint_bucketId` of the event |
 
@@ -190,16 +209,16 @@ geometry is involved.
 
 ### What it cannot tell you
 
-- **Purity is an upper bound.** An identifier is a whole gas gap for a strip
-  chamber, so a pattern holding the wrong strip of a right gap counts it in pile
-  A. Test 3 is what sees that.
+- **A neighbouring strip counts against the pattern.** Only the closest strip
+  of a gas gap is the muon's, so a pattern holding the next strip of the same
+  cluster counts it in pile C.
 - **Pile-up cannot be separated from noise.** The truth tree carries no
   pile-up particles, so pile-up muons, cavern background and detector noise all
   land in pile C together. It is reported as one category and named as such
   rather than being split into numbers we cannot support.
 - **Pile C is slightly contaminated with real muon hits.** A hit genuinely left
-  by the muon that the truth segment fit rejected as an outlier is not in that
-  muon's identifier set, so it is counted as belonging to nothing.
+  by the muon that the truth segment fit rejected as an outlier is not claimed
+  by any segment, so it is counted as belonging to nothing.
 - **The mismatched fraction is only meaningful where there is more than one
   muon to confuse.** The particle-gun samples carry one or two, so it measures
   merging between those and nothing else.
@@ -212,13 +231,11 @@ geometry is involved.
 
 ### What it measures
 
-Tests 1 and 2 decide what a hit belongs to by its identifier. For an MDT an
-identifier is one tube, which is precise; for a strip chamber it is a whole gas
-gap holding dozens of strips. So a pattern that took the wrong strip of the
-right gap is perfectly pure by test 2.
+Tests 1 and 2 decide which hits are the muon's, one per surface and direction.
+They do not say how far a pattern's other hits are from the muon's path.
 
-This test never looks at identifiers. It looks at where the hit physically is.
-Its purpose is to measure the error in test 2.
+This test looks at where every hit of a pattern physically is, against the
+truth line of its chamber.
 
 ### Definition
 
@@ -276,8 +293,7 @@ three chambers therefore gives three sets of pulls, and it can be right in one
 chamber and wrong in another. The natural unit is the pattern-and-chamber pair,
 and collapsing to one number per pattern would hide exactly that.
 
-The segment that applies to a hit is the one whose `Segments_hitGeoIds` claims
-that hit's identifier — an exact assignment, not a geometric guess. Hits claimed
+The segment that applies to a hit is the one that claims it, as in test 1. Hits claimed
 by no segment are measured against the assigned muon's segment in the same
 chamber, since for them the question is how far from the muon's path the pattern
 reached.
@@ -417,7 +433,7 @@ tests 1 and 2.
   pattern made entirely of such hits is more likely a pile-up muon than a
   failure — but it does not decide it.
 - **Duplicates say nothing about which of the two patterns is better.** They are
-  counted, not ranked, beyond taking the one with the most shared identifiers as
+  counted, not ranked, beyond taking the one with the most shared hits as
   the muon's.
 
 
