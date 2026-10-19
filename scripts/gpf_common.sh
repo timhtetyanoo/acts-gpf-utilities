@@ -30,6 +30,7 @@
 #   --repetitions N          timing repetitions                        GPF_REPETITIONS
 #   --backend cpu|cuda       where the finder runs                     GPF_BACKEND
 #   --workspace-mb N         GPU memory for the patterns of an event   GPF_WORKSPACE_MB
+#   --threads "N ..."        thread counts of a throughput scan        GPF_THREADS
 #   --seed-from-mdt          MDT hits seed too                         GPF_SEED_FROM_MDT
 #   --seed-from-inner        the inner station seeds too               GPF_SEED_FROM_INNER
 #   --build-dir DIR          ACTS build directory                      ACTS_BUILD_DIR
@@ -60,6 +61,7 @@ gpf_parse_args() {
       --repetitions) flags[GPF_REPETITIONS]="${2:?}"; shift ;;
       --backend) flags[GPF_BACKEND]="${2:?--backend needs cpu or cuda}"; shift ;;
       --workspace-mb) flags[GPF_WORKSPACE_MB]="${2:?}"; shift ;;
+      --threads) flags[GPF_THREADS]="${2:?}"; shift ;;
       --seed-from-mdt) flags[GPF_SEED_FROM_MDT]=1 ;;
       --seed-from-inner) flags[GPF_SEED_FROM_INNER]=1 ;;
       --build-dir) flags[ACTS_BUILD_DIR]="${2?}"; shift ;;
