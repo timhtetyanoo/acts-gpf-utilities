@@ -55,12 +55,13 @@
 #   GPF_SAMPLE        label of the input, e.g. PG0     (default: the n-tuple's file name)
 #   GPF_EVENTS        events per repetition            (a number or "all", default: 500)
 #   GPF_REPETITIONS   timing repetitions               (default: 3)
-#   GPF_FIRST_EVENT   events skipped before the first (default: 0)
 #   GPF_PROFILE       1: the stages of the CPU finder into profile/, read by
 #                     scripts/profile/analyze_profile.py. Needs the profiling
 #                     build, -DACTS_GPF_PROFILE on the gpf-profiling branch
 #   GPF_BACKEND       cpu or cuda                      (default: cpu)
-#   GPF_BATCH_SIZE    seeds built at once on the GPU   (default: the algorithm's)
+#   GPF_WORKSPACE_MB  GPU memory in MiB for the patterns of an event; an event
+#                     that needs more keeps the best ones and reports an
+#                     overflow (default: half of the free device memory)
 #   GPF_SEED_FROM_MDT 1: MDT hits seed too             (default: 0)
 #   GPF_SEED_FROM_INNER 1: the inner station seeds too, besides the middle and
 #                     outer ones                       (default: 0)
@@ -130,10 +131,11 @@ mkdir -p -- "${run_dir}/performance/repetitions" "${run_dir}/logs"
   echo "geometry:      ${geometry}"
   echo "events:        ${events}"
   echo "repetitions:   ${repetitions}"
-  echo "first event:   ${GPF_FIRST_EVENT:-0}"
   [[ -n "${GPF_PROFILE:-}" ]] && echo "profile:       yes"
   echo "backend:       ${backend}"
-  [[ "${backend}" == cuda ]] && echo "batch size:    ${GPF_BATCH_SIZE:-default}"
+  if [[ "${backend}" == cuda ]]; then
+    echo "workspace:     ${GPF_WORKSPACE_MB:-half of the free GPU memory}${GPF_WORKSPACE_MB:+ MiB}"
+  fi
   echo "mdt seeds:     ${GPF_SEED_FROM_MDT:-0}"
   echo "inner seeds:   ${GPF_SEED_FROM_INNER:-0}"
   echo "build:         ${build_dir}"
@@ -183,10 +185,9 @@ run_cpp() {
   ACTS_GPF_TIMING="${timing}" \
   ACTS_GPF_OUTPUT="${output}" \
   ACTS_GPF_LOG_LEVEL=WARNING \
-  ACTS_GPF_BATCH_SIZE="${GPF_BATCH_SIZE:-}" \
+  ACTS_GPF_WORKSPACE_MB="${GPF_WORKSPACE_MB:-}" \
   ACTS_GPF_SEED_FROM_MDT="${GPF_SEED_FROM_MDT:-}" \
   ACTS_GPF_SEED_FROM_INNER="${GPF_SEED_FROM_INNER:-}" \
-  ACTS_GPF_FIRST_EVENT="${GPF_FIRST_EVENT:-}" \
   ACTS_GPF_PROFILE_DIR="${profile}" \
     /usr/bin/time --format='%e %U %S %M' \
     --output="${repetitions_dir}/process_${tag}.txt" \

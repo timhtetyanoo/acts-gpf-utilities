@@ -26,11 +26,10 @@
 #   --sample NAME            label of the input, e.g. PG0, PG200       GPF_SAMPLE
 #   --ntuple FILE            space point n-tuple                       GPF_NTUPLE
 #   --events N|all           events per repetition                     GPF_EVENTS
-#   --first-event N          events skipped before the first one       GPF_FIRST_EVENT
 #   --profile                record the stages (profiling build only)  GPF_PROFILE
 #   --repetitions N          timing repetitions                        GPF_REPETITIONS
 #   --backend cpu|cuda       where the finder runs                     GPF_BACKEND
-#   --batch-size N           seeds built at once on the GPU            GPF_BATCH_SIZE
+#   --workspace-mb N         GPU memory for the patterns of an event   GPF_WORKSPACE_MB
 #   --seed-from-mdt          MDT hits seed too                         GPF_SEED_FROM_MDT
 #   --seed-from-inner        the inner station seeds too               GPF_SEED_FROM_INNER
 #   --build-dir DIR          ACTS build directory                      ACTS_BUILD_DIR
@@ -57,11 +56,10 @@ gpf_parse_args() {
       --sample) flags[GPF_SAMPLE]="${2:?}"; shift ;;
       --ntuple) flags[GPF_NTUPLE]="${2:?}"; shift ;;
       --events) flags[GPF_EVENTS]="${2:?--events needs a number or 'all'}"; shift ;;
-      --first-event) flags[GPF_FIRST_EVENT]="${2:?}"; shift ;;
       --profile) flags[GPF_PROFILE]=1 ;;
       --repetitions) flags[GPF_REPETITIONS]="${2:?}"; shift ;;
       --backend) flags[GPF_BACKEND]="${2:?--backend needs cpu or cuda}"; shift ;;
-      --batch-size) flags[GPF_BATCH_SIZE]="${2:?}"; shift ;;
+      --workspace-mb) flags[GPF_WORKSPACE_MB]="${2:?}"; shift ;;
       --seed-from-mdt) flags[GPF_SEED_FROM_MDT]=1 ;;
       --seed-from-inner) flags[GPF_SEED_FROM_INNER]=1 ;;
       --build-dir) flags[ACTS_BUILD_DIR]="${2?}"; shift ;;
