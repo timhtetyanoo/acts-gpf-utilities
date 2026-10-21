@@ -116,13 +116,19 @@ class EventColumns:
         return values
 
 
-def truth_hits(truth_event, lines, rows_of_geo, hits):
+def truth_hits(truth_event, lines, by_geo, span_of_geo, hits):
     """The hits each truth segment claims, as the muon and segment of each row.
 
     For every surface a segment lists, the hits on it are split by the
     directions they measure, and in each group the hit with the smallest
     chi2 to the segment's line is claimed. A hit claimed by two segments goes to
     the one it is closer to. Rows nobody claims keep the muon and segment -1.
+
+    Space points of one measurement, the same strip combined with different
+    strips of the other direction, share a surface and a local y
+    (HitPayload::overlaps). The third array names, for every row, the claimed
+    row of its measurement, so that any of them stands for the claimed one; it
+    is the row itself otherwise.
     """
     n_rows = len(hits["position"])
     owner = np.full(n_rows, -1, dtype=int)
@@ -131,7 +137,8 @@ def truth_hits(truth_event, lines, rows_of_geo, hits):
     direction_kind = 2 * hits["measures_eta"].astype(int) + hits["measures_phi"]
     owner_of_segment = truth_event["Segments_truthLink"]
     for segment, ids in enumerate(truth_event["Segments_hitGeoIds"]):
-        rows = [rows_of_geo[int(g)] for g in ids if int(g) in rows_of_geo]
+        rows = [by_geo[slice(*span_of_geo[int(g)])] for g in ids
+                if int(g) in span_of_geo]
         if not rows:
             continue
         rows = np.unique(np.concatenate(rows))
@@ -149,7 +156,17 @@ def truth_hits(truth_event, lines, rows_of_geo, hits):
                 best[row] = value
                 owner[row] = int(owner_of_segment[segment])
                 segment_of_row[row] = segment
-    return owner, segment_of_row
+    measurement = np.empty(n_rows, dtype=[("geo", np.int64), ("y", float)])
+    measurement["geo"] = hits["geometry"]
+    measurement["y"] = hits["local_y"]
+    _, measurement_id = np.unique(measurement, return_inverse=True)
+    claimed = np.flatnonzero(owner >= 0)
+    claimed_of = np.full(measurement_id.max() + 1 if n_rows else 0, -1)
+    claimed_of[measurement_id[claimed]] = claimed
+    truth_row = np.arange(n_rows)
+    stand_in = (owner < 0) & (claimed_of[measurement_id] >= 0)
+    truth_row[stand_in] = claimed_of[measurement_id[stand_in]]
+    return owner, segment_of_row, truth_row
 
 
 def truth_lines(truth_event):
@@ -249,13 +266,15 @@ def main() -> int:
             np.asarray(sp_event["spacePoint_muonId"]))
         sp_category = gpfval.hit_categories(sp_decoded)
         sp_station = gpfval.station_index(sp_decoded["stationName"])
-        # the rows of every identifier
+        # the rows of every identifier, as a slice of the rows sorted by it
         by_geo = np.argsort(sp_geo, kind="stable")
         unique_geo, geo_start = np.unique(sp_geo[by_geo], return_index=True)
-        rows_of_geo = dict(zip(unique_geo.tolist(),
-                               np.split(by_geo, geo_start[1:])))
+        geo_end = np.append(geo_start[1:], len(sp_geo))
+        span_of_geo = dict(zip(unique_geo.tolist(),
+                               zip(geo_start.tolist(), geo_end.tolist())))
         sp_hits = {
             "geometry": sp_geo,
+            "local_y": sp_position[:, 1],
             "position": sp_position,
             "sensor": gpfval.direction(sp_event["spacePoint_sensorDirPhi"],
                                        sp_event["spacePoint_sensorDirTheta"]),
@@ -288,8 +307,8 @@ def main() -> int:
         # --- the truth -------------------------------------------------------
         lines = truth_lines(truth_event)
         owner_of_segment = truth_event["Segments_truthLink"]
-        owner_of_row, segment_of_row = truth_hits(
-            truth_event, lines, rows_of_geo, sp_hits)
+        owner_of_row, segment_of_row, truth_row = truth_hits(
+            truth_event, lines, by_geo, span_of_geo, sp_hits)
 
         for muon in range(len(truth_event["Muons_pt"])):
             # the hits the muon's truth segments claim
@@ -324,8 +343,10 @@ def main() -> int:
         hit_row = np.array([-1 if row is None else row for row in (
             row_of_key(int(b), int(i)) for b, i in zip(hit_bucket, hit_index))],
             dtype=int)
-        hit_owner = np.where(hit_row >= 0, owner_of_row[hit_row], -1)
-        hit_segment = np.where(hit_row >= 0, segment_of_row[hit_row], -1)
+        # the claimed row each pattern hit stands for, and its muon and segment
+        hit_truth = np.where(hit_row >= 0, truth_row[hit_row], -1)
+        hit_owner = np.where(hit_truth >= 0, owner_of_row[hit_truth], -1)
+        hit_segment = np.where(hit_truth >= 0, segment_of_row[hit_truth], -1)
 
         # a segment's chamber, read off the pattern hits it claims;
         # `Segments_chamberIdx` is in the shifted set and is not used
@@ -385,7 +406,7 @@ def main() -> int:
                                      ("nonPrec", "NonPrecMeas"),
                                      ("phi", "PhiMeas"))},
                 # distinct hits, the unit the truth side counts in
-                "shared": len(set(hit_row[mine][is_main].tolist())),
+                "shared": len(set(hit_truth[mine][is_main].tolist())),
                 "stationsWithMuon": len(set(stations[is_main].tolist())),
                 "nHits": int(mine.sum()),
                 "nHitsMainMuon": int(is_main.sum()),

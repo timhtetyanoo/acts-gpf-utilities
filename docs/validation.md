@@ -93,6 +93,12 @@ eta hit, one phi hit and one hit measuring both. An MDT surface is one tube and 
 strip surface one gas gap, so the truth holds one hit per tube and one per gas
 gap and direction. A hit two segments claim goes to the one it is closer to.
 
+One strip often appears in several space points, combined with different
+strips of the other direction. They share a surface and a local y and carry the
+same bending measurement, which `HitPayload::overlaps` treats as one. Such a
+measurement counts once for the muon, and a pattern holding any of its space
+points holds the claimed hit.
+
 A segment's line and its surfaces belong together: on PG200 the hits on a
 segment's surfaces have a median chi2 of 1.3 to its own line and 1.7e7 to its
 neighbour's. For a tube measuring eta only, `chi2_term` equals the square of
@@ -120,10 +126,12 @@ is gone. Numbers from runs made before the change are not comparable with the
 ones made after it.
 
 Earlier versions also took every hit on a surface the muon crossed as the
-muon's; now only the closest hit per surface and direction is. On 2,000 PG200
-events this lowers the efficiency from 0.985 to 0.975, purity from 0.94 to 0.90
-and completeness from 0.85 to 0.80, for the CPU and the GPU alike. Tables built
-before the change have to be built again.
+muon's; now only the closest measurement per surface and direction is. On the
+full samples (CPU) this lowers the efficiency from 0.987 to 0.982 on PG0 and
+from 0.981 to 0.973 on PG200, purity from 0.94 to 0.91 and completeness from
+0.85 to 0.81 on PG200; the GPU moves the same way. The difference is patterns
+holding another hit on a layer the muon crossed, such as a neighbouring strip.
+Tables built before the change have to be built again.
 
 ### What it cannot tell you
 
