@@ -21,7 +21,7 @@ the patterns are judged therefore never requires running the pattern finder agai
 | 5 | `scripts/run/run_throughput.sh` | events per second against the number of threads | `throughput.csv` |
 
 Steps 1 and 5 need an ACTS build; the others only read files. Step 4 needs an
-Athena release.
+Athena release and a locally changed MuonFastRecoValidation (see step 4).
 
 ## Quick start
 
@@ -205,6 +205,21 @@ scripts/validation/run_hough_plots.sh cpu_pg0_all cuda_v2_pg0_all --labels CPU,G
 
 One run writes into its `hough/`; several runs, one curve each, into
 `compare/<first>_vs_<second>.../hough/`.
+
+**This does not work with the package as it is upstream.** The upstream
+`FastRecoValidation` plots scenarios hard-coded in its source
+(`MuonFastRecoValidation/util/FastRecoValidation.cxx`). The script needs a
+version that takes them from the command line:
+
+```text
+FastRecoValidation [--plot-dir DIR] [--out DIR] [--sample-name TEXT] [LABEL[@#RRGGBB]=]FILE.root ...
+```
+
+These changes were made locally for this work and are not in the package. To use
+the script, add such a command line to `FastRecoValidation.cxx`, or plot the
+`validation/fastreco.root` files that `to_fastreco_tuple.py` writes by editing
+the hard-coded scenarios. The figures already in `results/` were made with the
+local version.
 
 ### 5. `run_throughput.sh`: events per second against threads
 
