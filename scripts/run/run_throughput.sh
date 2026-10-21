@@ -12,7 +12,10 @@
 # Writes results/<host>/<name>/:
 #   throughput.csv   per thread count: events per second, wall and CPU time,
 #                    cores in use, events that overflowed, failed or found a
-#                    different number of patterns than on one thread
+#                    different number of patterns than on one thread; for a
+#                    GPU run also the GPU's mean utilisation and power, median
+#                    SM clock and peak memory during that pass
+#   gpu.csv          nvidia-smi samples every 200 ms (GPU run)
 #   run_info.txt     what was run
 #   log.txt          output of the test
 #
@@ -109,6 +112,23 @@ mkdir -p -- "${run_dir}"
 } >"${run_dir}/run_info.txt"
 
 echo "Running ${name}: ${events} events on ${threads} threads"
+# A GPU run samples the GPU every 200 ms; each timed pass gets the samples
+# taken while it ran
+sampler=""
+stop_sampler() {
+  if [[ -n "${sampler}" ]]; then
+    kill "${sampler}" 2>/dev/null || true
+    wait "${sampler}" 2>/dev/null || true
+    sampler=""
+  fi
+}
+trap stop_sampler EXIT
+if [[ "${backend}" == cuda ]] && command -v nvidia-smi >/dev/null; then
+  nvidia-smi --format=csv,nounits --loop-ms=200 \
+    --query-gpu=timestamp,utilization.gpu,memory.used,power.draw,clocks.sm \
+    >"${run_dir}/gpu.csv" 2>/dev/null &
+  sampler=$!
+fi
 ACTS_GPF_NTUPLE="${ntuple}" \
 ACTS_GPF_GEOMETRY="${geometry}" \
 ACTS_GPF_MAX_EVENTS="$(gpf_event_cap "${events}")" \
@@ -123,7 +143,12 @@ ACTS_GPF_SEED_FROM_INNER="${GPF_SEED_FROM_INNER:-}" \
   tail -n 5 "${run_dir}/log.txt" >&2
   exit 1
 }
+stop_sampler
 echo "finished:      $(date '+%F %T')" >>"${run_dir}/run_info.txt"
+if [[ -s "${run_dir}/gpu.csv" ]]; then
+  "$(gpf_python)" "${script_dir}/throughput_gpu.py" \
+    "${run_dir}/throughput.csv" "${run_dir}/gpu.csv"
+fi
 
 echo
 column -s, -t "${run_dir}/throughput.csv"

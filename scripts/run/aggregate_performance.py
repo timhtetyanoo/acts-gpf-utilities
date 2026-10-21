@@ -157,6 +157,16 @@ def main() -> int:
     for raw, name in gpu_columns.items():
         if raw in events:
             table[name] = events[raw]
+    # device memory of each event: all of it, and the pattern building's share
+    mib = 1. / (1 << 20)
+    memory_columns = {
+        "device_bytes": "GPU memory of the event (MiB)",
+        "workspaceUsed_bytes": "GPU memory of the pattern building (MiB)",
+    }
+    memory_columns = {raw: name for raw, name in memory_columns.items()
+                      if raw in events}
+    for raw, name in memory_columns.items():
+        table[name] = events[raw] * mib
 
     def describe(group: pd.DataFrame) -> pd.Series:
         time = group["time (ms)"]
@@ -182,6 +192,10 @@ def main() -> int:
         out["median patterns per event"] = group["patterns"].median()
         if "overflow" in events:
             out["events with an overflow"] = int((group[gpu_columns["overflow"]] != 0).sum())
+        for name in memory_columns.values():
+            base = name.removesuffix(" (MiB)")
+            out[f"{base} (median MiB)"] = group[name].median()
+            out[f"{base} (peak MiB)"] = group[name].max()
         return pd.Series(out)
 
     summary = table.groupby(["run", "repetition"]).apply(
@@ -204,7 +218,7 @@ def main() -> int:
         summary[column] = summary[column].map(lambda v: float(f"{v:.4g}"))
     # microseconds are the finest the timing files hold
     # four significant digits, so that small times keep their precision
-    times = [c for c in summary.columns if "ms" in c]
+    times = [c for c in summary.columns if "ms" in c or "MiB" in c]
     summary[times] = summary[times].map(lambda v: float(f"{v:.4g}"))
     summary["throughput (events/s)"] = summary["throughput (events/s)"].round(1)
     table[[c for c in table.columns if "(ms)" in c]] = \
