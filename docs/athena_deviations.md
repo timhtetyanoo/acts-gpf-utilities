@@ -8,6 +8,13 @@ Entries are marked **verified** when the difference was read out of both code
 bases or measured in the data, and **suspected** when it is reasoning that has
 not been tested.
 
+**Status:** written in September 2026 against the Core of that time. The Core
+has been replaced several times since (now `e4141b599`), and the example now
+follows the Athena settings of `MuonGlobalPatternFindingAlg` (see
+[acts_changes.md](acts_changes.md)). Entries 3 to 5 refer to code that no longer
+exists in that form and are kept as a record; entries 1, 2 and 6 were not
+re-checked against the current Core.
+
 ---
 
 ## 1. sTGC hits are classified differently — verified

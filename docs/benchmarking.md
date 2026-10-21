@@ -29,8 +29,8 @@ The summary also carries the throughput, `throughput (events/s)`: the events of 
 repetition divided by the summed time of the finder calls. It is the inverse of
 the mean time, counts one event after the other and leaves out reading, writing
 and start-up, so it is a figure for the finder and not for the whole job. A
-throughput of a parallel implementation, with many events in flight, is not this
-number. `scripts/compare/compare_performance.py` divides two summaries into
+throughput with many events in flight is not this number; that is measured by
+`run_throughput.sh` (below). `scripts/compare/compare_performance.py` divides two summaries into
 a speedup.
 
 The summary also has the resources of each repetition: the finder process's
@@ -41,14 +41,17 @@ on it shows up there; the SM clock tells whether the GPU ran at its full clock.
 
 ## When there is a GPU
 
-The phases go on the same row:
+The GPU data test adds its stages and what the event held to the same row:
 
 ```text
-totalTime_us, uploadTime_us, kernelTime_us, downloadTime_us
+totalTime_us, hostPreTime_us, uploadTime_us, kernelTime_us, downloadTime_us,
+hostPostTime_us, nSeeds, nCandidates, nPatternsInEta, overflow,
+workspaceUsed_bytes, device_bytes
 ```
 
-`totalTime_us` stays the end to end, which is below the sum of the phases by
-however much transfer and compute overlap. The raw files keep these names and
+`totalTime_us` stays the end to end. `overflow` is non-zero when the patterns of
+an event did not fit its workspace, and `workspaceUsed_bytes` says how much of it
+the event used. The raw files keep these names and
 microseconds; `events.csv` and `summary.csv` give the same numbers in
 milliseconds under names that say what each stage is, e.g. `GPU kernels (ms)`
 and `GPU kernels (median ms)`.
@@ -164,3 +167,16 @@ A median with an error, which `microBenchmark` gives and a single wall-clock
 measurement does not, is also worth having — it protects against one unlucky run
 being reported as a result.
 
+## Throughput
+
+`run_throughput.sh` answers a different question: how many events per second a
+machine processes when several events are in flight. The data test reads the
+events into memory first, then runs them on N threads that share one pattern
+finder, each taking the next event; it does this for every N, once to warm up
+and once timed. Events per second is the number of events over the wall time of
+the timed pass, and the CPU time over the wall time gives the cores in use. Every
+pass has to reproduce each event's number of patterns from one thread, and on the
+GPU every event in flight has the same fixed workspace, so the patterns do not
+depend on N. The Python `Sequencer` cannot measure this: its reader handles one
+event at a time and takes longer than the pattern finder, so it limits every
+thread count to the same rate.

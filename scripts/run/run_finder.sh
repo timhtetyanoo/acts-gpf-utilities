@@ -45,8 +45,6 @@
 #                                 process_rNN.txt of /usr/bin/time and, on the
 #                                 GPU, gpu_rNN.csv of nvidia-smi
 #   logs/                    finder output of each repetition
-#   profile/                 with GPF_PROFILE: seeds.csv, events.csv and their
-#                            analysis, of the first repetition
 #
 # Settings (flags are listed in scripts/gpf_common.sh):
 #   GPF_NAME          name of the run                  (required)
@@ -55,9 +53,6 @@
 #   GPF_SAMPLE        label of the input, e.g. PG0     (default: the n-tuple's file name)
 #   GPF_EVENTS        events per repetition            (a number or "all", default: 500)
 #   GPF_REPETITIONS   timing repetitions               (default: 3)
-#   GPF_PROFILE       1: the stages of the CPU finder into profile/, read by
-#                     scripts/profile/analyze_profile.py. Needs the profiling
-#                     build, -DACTS_GPF_PROFILE on the gpf-profiling branch
 #   GPF_BACKEND       cpu or cuda                      (default: cpu)
 #   GPF_WORKSPACE_MB  GPU memory in MiB for the patterns of an event; an event
 #                     that needs more keeps the best ones and reports an
@@ -91,7 +86,8 @@ if [[ -z "${ntuple}" || -z "${geometry}" ]]; then
 fi
 # A label of the input for the tables and the plots; the files decide nothing
 sample="${GPF_SAMPLE:-$(basename -- "${ntuple}" .root)}"
-python="$(gpf_python)"
+# The analysis at the end needs the python packages: stop now if they are missing
+gpf_python >/dev/null
 backend="${GPF_BACKEND:-cpu}"
 case "${backend}" in
   cpu) executable="${build_dir}/bin/ActsUnitTestGlobalPatternFinderData" ;;
@@ -131,7 +127,6 @@ mkdir -p -- "${run_dir}/performance/repetitions" "${run_dir}/logs"
   echo "geometry:      ${geometry}"
   echo "events:        ${events}"
   echo "repetitions:   ${repetitions}"
-  [[ -n "${GPF_PROFILE:-}" ]] && echo "profile:       yes"
   echo "backend:       ${backend}"
   if [[ "${backend}" == cuda ]]; then
     echo "workspace:     ${GPF_WORKSPACE_MB:-half of the free GPU memory}${GPF_WORKSPACE_MB:+ MiB}"
@@ -168,9 +163,7 @@ run_cpp() {
   local timing="${repetitions_dir}/timing_${tag}.csv"
   local log="${run_dir}/logs/${tag}.log"
   local output=""
-  local profile=""
   ((repetition == 1)) && output="${run_dir}/patterns.root"
-  ((repetition == 1)) && [[ -n "${GPF_PROFILE:-}" ]] && profile="${run_dir}/profile"
 
   echo "Running ${name} ${tag}"
   if [[ "${backend}" == cuda ]] && command -v nvidia-smi >/dev/null; then
@@ -184,11 +177,9 @@ run_cpp() {
   ACTS_GPF_MAX_EVENTS="$(gpf_event_cap "${events}")" \
   ACTS_GPF_TIMING="${timing}" \
   ACTS_GPF_OUTPUT="${output}" \
-  ACTS_GPF_LOG_LEVEL=WARNING \
   ACTS_GPF_WORKSPACE_MB="${GPF_WORKSPACE_MB:-}" \
   ACTS_GPF_SEED_FROM_MDT="${GPF_SEED_FROM_MDT:-}" \
   ACTS_GPF_SEED_FROM_INNER="${GPF_SEED_FROM_INNER:-}" \
-  ACTS_GPF_PROFILE_DIR="${profile}" \
     /usr/bin/time --format='%e %U %S %M' \
     --output="${repetitions_dir}/process_${tag}.txt" \
     "${executable}" --log_level=error --report_level=no --color_output=no \
@@ -207,10 +198,6 @@ run_cpp() {
     echo "No pattern file was written, see ${log}" >&2
     exit 1
   fi
-  if [[ -n "${profile}" && ! -f "${profile}/seeds.csv" ]]; then
-    echo "No profile was written: ${executable} is not a profiling build" >&2
-    exit 1
-  fi
 }
 
 for repetition in $(seq 1 "${repetitions}"); do
@@ -220,9 +207,6 @@ done
 echo
 echo "Collecting"
 "${script_dir}/analyze_performance.sh"
-if [[ -n "${GPF_PROFILE:-}" ]]; then
-  "${python}" "${script_dir}/../profile/analyze_profile.py" "${run_dir}/profile"
-fi
 echo "finished:      $(date '+%F %T')" >>"${run_dir}/run_info.txt"
 
 echo

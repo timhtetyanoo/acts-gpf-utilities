@@ -1,433 +1,339 @@
 # ACTS muon global pattern finder utilities
 
-Validation and benchmarking tooling around the muon global pattern finder in
-[ACTS](https://github.com/acts-project/acts). The algorithm, its unit tests and
-the run entry point stay in ACTS; this repository keeps the scripts that drive
-them, measure the output and draw the plots.
+Scripts that run the muon global pattern finder of
+[ACTS](https://github.com/acts-project/acts) on the CPU and on the GPU, measure its
+speed, judge its patterns against the truth and compare two runs. The pattern
+finder, its tests and the programs that run it live in ACTS;
+[docs/acts_changes.md](docs/acts_changes.md) says which branch holds what.
 
-The CPU example is the reference against which the CUDA implementation will be
-validated: each implementation is a named run with its own build, and the
-comparison takes two runs by name.
+Every stage reads what the stage before it wrote and nothing else. A change to how
+the patterns are judged therefore never requires running the pattern finder again.
 
-The chain follows Athena's `MuonFastRecoTester`: one stage produces numbers and
-nothing else, a later stage decides what those numbers mean. A change to the
-definition of "the pattern found the muon" therefore never requires running the
-pattern finder again.
+## The pipeline
 
-## Contents
+| step | entry point | what it does | writes |
+| --- | --- | --- | --- |
+| 0 | ACTS unit tests | `ActsUnitTestCudaPatternFinder` checks the GPU functions against the CPU's; `ActsUnitTestGlobalPatternFinder` the CPU example's helpers | |
+| 1 | `scripts/run/run_finder.sh` | runs the pattern finder (CPU or GPU) over a sample, a few times for timing | `patterns.root`, `performance/` |
+| 2 | `scripts/validation/run_validation.sh` | matches the patterns to the truth muons, computes the metrics and figures | `validation/` |
+| 3 | `scripts/compare/run_compare.sh` | puts two runs side by side: timing, metrics, figures, and the patterns hit by hit | `compare/<a>_vs_<b>/` |
+| 4 | `scripts/validation/run_hough_plots.sh` | the figures of the ATLAS MuonFastRecoValidation package, for one run or several | `hough/` |
+| 5 | `scripts/run/run_throughput.sh` | events per second against the number of threads | `throughput.csv` |
 
-```text
-scripts/
-  gpf_common.sh                        shared helpers: flags, config, python, n-tuples
-  run/
-    run_finder.sh                      STEP 1: run the finder -> patterns + performance
-    analyze_performance.sh             the performance summary, alone
-    aggregate_performance.py           per-event csv + resources -> summary
-    plot_performance.py                cost vs occupancy, and the speedup of one run over another
-    plot_stages.py                     where the time of an event goes, per stage of the GPU path
-  validation/
-    run_validation.sh                  STEP 2: patterns + n-tuple -> metrics and figures
-    gpfval.py                          definitions transcribed from ACTS & Athena
-    build_validation_tables.py         patterns + truth -> the validation tables
-    compute_metrics.py                 the tables -> efficiency, fakes, residuals
-    make_plots.py                      the four figures
-    to_fastreco_tuple.py               tables -> MuonFastRecoValidation n-tuple
-    run_hough_plots.sh                 STEP 3, optional: the plotting package's figures
-    compare_patterns.py                two pattern files, hit by hit
-  compare/
-    run_compare.sh                     compare two runs and two validations
-    compare_performance.py             two performance summaries -> speedup table
-configs/                               one config per sample and backend; name each run with --name
-results/<host>/                        everything the scripts write, per machine; only the small summaries are tracked
-docs/
-  acts_changes.md                      what this work changed in the ACTS checkout
+Steps 1 and 5 need an ACTS build; the others only read files. Step 4 needs an
+Athena release.
+
+## Quick start
+
+```bash
+source ~/cern/env_setup.sh            # LCG environment: python with ROOT, pandas, ...
+cd ~/cern/acts-gpf-utilities
+
+# CPU reference and GPU, one sample
+scripts/run/run_finder.sh       --config configs/cpu_pg0.conf
+scripts/validation/run_validation.sh --config configs/cpu_pg0.conf
+scripts/run/run_finder.sh       --config configs/cuda_pg0.conf --name cuda_v2_pg0_all
+scripts/validation/run_validation.sh --config configs/cuda_pg0.conf --name cuda_v2_pg0_all
+scripts/compare/run_compare.sh  --reference cpu_pg0_all --compare cuda_v2_pg0_all
 ```
+
+Every script prints its options with `--help`.
 
 ## Requirements
 
-- Bash;
-- an ACTS build containing `ActsUnitTestGlobalPatternFinderData`, for stage 1
-  only; the analysis stages need no build;
-- Python 3.10 or newer with the packages of `requirements.txt`: the LCG
-  environment of `env_setup.sh` has all of them;
-- the Athena-exported n-tuples and the matching tracking geometry.
-
-Source `env_setup.sh` before running anything. The scripts use the `python3` of
-that shell and nothing else; `PYTHON=` or `--python` names another interpreter.
-There is no virtual environment.
+- An ACTS build of the branch to be measured (see
+  [docs/acts_changes.md](docs/acts_changes.md)): `bin/ActsUnitTestGlobalPatternFinderData`
+  for the CPU, and for the GPU a build with
+  `-DACTS_BUILD_EXAMPLES_CUDA_GLOBAL_PATTERN_FINDER=ON`, which has
+  `bin/ActsUnitTestCudaGlobalPatternFinderData`.
+- Python 3.10 or newer with the packages of `requirements.txt`. The LCG
+  environment of `env_setup.sh` has them; the scripts use the `python3` of the
+  shell, or the one named by `PYTHON`.
+- Bash, and `nvidia-smi` for the GPU's resource usage.
 
 ## Inputs
 
-The n-tuples are written by Athena's `MuonActsDump`: `SpacePointWriter` fills
-the `MuonSpacePoints` tree, `TruthSegmentWriter` the `MuonTruth` tree. The
-geometry comes from the ACTS tracking geometry json converter. They live in
-`data/` of this repository, which is ignored by git, so every machine needs its
-own copy:
+The n-tuples are written by Athena's `MuonActsDump` (`SpacePointWriter` fills the
+`MuonSpacePoints` tree, `TruthSegmentWriter` the `MuonTruth` tree); the tracking
+geometry comes from the ACTS tracking geometry JSON converter. They are too large
+for git and live in `data/`, which every machine needs its own copy of:
 
 ```text
-data/ParticleGun_MU0.root
-data/ParticleGun_MU200.root
+data/ParticleGun_MU0.root               PG0: single muons
+data/ParticleGun_MU200.root             PG200: muons with pile-up 200
 data/ActsTrackingGeometry_PG0.json
 data/ActsTrackingGeometry_PG200.json
 ```
 
-Each sample was exported with its own detector geometry, and the geometry of
-one sample misses surfaces of the other's hits. A run therefore names both of
-its input files, `GPF_NTUPLE` and `GPF_GEOMETRY` (or `--ntuple` and
-`--geometry`); the runner takes nothing from the sample name. `GPF_SAMPLE` is
-only the label the tables and the plots show.
+Each sample was exported with its own geometry, so a run always names both files
+(`GPF_NTUPLE` and `GPF_GEOMETRY`).
+
+Dumps made before `MuonActsDump` was fixed hold the two local covariances of a
+space point in swapped order. The files in `data/` are already corrected. An
+n-tuple from such a dump has to be corrected once, into a copy, with
+`scripts/fix_ntuple_covariance.py`; running it twice swaps them back.
 
 ## Runs, settings and results
 
-A **run** has a name, and everything it produces goes into `results/<host>/<name>/`.
-The name is the only thing that tells two runs apart, so give each run one that
-says what it is: `cpu_pg0_all`, `cuda_v2_pg200_500ev`. A config file holds one run:
+A **run** has a name, and everything it produces goes into
+`results/<host>/<name>/`, where `<host>` is the machine's short host name. Give
+each run a name that says what it is, e.g. `cpu_pg0_all` or `cuda_v2_pg200_all`.
 
-```bash
-# configs/cpu_pg0.conf
-GPF_NAME=cpu_pg0_all
-GPF_SAMPLE=PG0
-GPF_NTUPLE="$HOME/cern/acts-gpf-utilities/data/ParticleGun_MU0.root"
-GPF_GEOMETRY="$HOME/cern/acts-gpf-utilities/data/ActsTrackingGeometry_PG0.json"
-GPF_EVENTS=all
-GPF_REPETITIONS=3
-ACTS_BUILD_DIR="$HOME/cern/acts/build"
-```
-
-Both steps and the comparison take their settings from flags, a config file or
-environment variables. Where they disagree the order is
+A config file holds the settings of one run as bash assignments. There is one per
+backend and sample:
 
 ```text
-flag  >  config file  >  environment variable  >  the script's default
+configs/cpu_pg0.conf    configs/cpu_pg200.conf
+configs/cuda_pg0.conf   configs/cuda_pg200.conf
 ```
 
-so a config can be bent for one run from the command line:
+A flag overrides the config, and the config overrides an environment variable,
+so a config can be bent for one run:
 
 ```bash
-scripts/run/run_finder.sh --config configs/cpu_pg0.conf
-scripts/run/run_finder.sh --config configs/cpu_pg0.conf --name cpu_pg0_quick --events 100
-scripts/validation/run_validation.sh --name cpu_pg0_quick
+scripts/run/run_finder.sh --config configs/cpu_pg0.conf --name cpu_pg0_quick --events 100 --repetitions 1
+scripts/run/run_finder.sh --config configs/cpu_pg0.conf --name cpu_pg0_innerseeds_all --seed-from-inner
 ```
 
-A config is plain bash assignments. The flags and the variable each one sets are
-listed in `scripts/gpf_common.sh`, and `--help` prints the header of a script.
+| flag | setting |
+| --- | --- |
+| `--name`, `--sample`, `--ntuple`, `--geometry` | the run and its input |
+| `--events N\|all`, `--repetitions N` | events per repetition, timing repetitions |
+| `--backend cpu\|cuda`, `--build-dir DIR` | which finder and which build |
+| `--seed-from-mdt`, `--seed-from-inner` | also seed from MDT hits, from the inner station |
+| `--workspace-mb N` | GPU memory for the patterns of an event (default: half the free memory) |
+| `--threads "1 2 4"` | thread counts of `run_throughput.sh` |
+| `--station-eff-thr`, `--bending-eff-thr` | the matching thresholds of step 2 |
+| `--results-dir DIR` | where the runs are kept |
 
-Each machine writes into its own folder, `results/<host>/`, named by its short
-host name (`GPF_HOST` names another), so the results of several machines can
-sit in one repository. `results/` is ignored by git except for the small files
-that summarise a run, so they can be pushed next to the code and the rest stays
-local. For any run name:
+The full list is in `scripts/gpf_common.sh`.
 
-```text
-tracked   run_info.txt, validation/scores.csv, validation/metrics.log,
-          validation/plots/*.png, performance/summary.csv,
-          performance/event_times.png, performance/stages.png,
-          hough/**/*.pdf
-          compare/<a>_vs_<b>/: patterns.log, scores.csv, performance.csv,
-          performance.log, event_times.png, stages.png, plots/*.png, hough/**/*.pdf
-ignored   patterns.root, validation/tables/, validation/fastreco.root,
-          performance/events.csv, performance/repetitions/, logs/
-```
-
-That is about 3 MB for a run with the hough plots. The rules are in `.gitignore`;
-add a line there to track another file. `run_info.txt` in each run records the
-settings, the ACTS branch and revision, the build and the date, which is what a
-result is quoted with.
+Only the small files that summarise a run are tracked in git (the rules are in
+`.gitignore`): `run_info.txt`, `validation/scores.csv`, `validation/metrics.log`,
+`validation/plots/`, `performance/summary.csv`, the performance figures, the
+`hough/` PDFs, and the summaries and figures of a comparison. The patterns, the
+validation tables, the raw timings and the logs stay on the machine.
 
 ```text
 results/<host>/
   <name>/
-    run_info.txt            what was run
-    patterns.root           step 1: the finder's output, the input of step 2
-    performance/            step 1: summary.csv, events.csv, event_times.png, stages.png,
-                            repetitions/ (raw times and resources)
-    logs/                   step 1: finder output of each repetition
-    validation/             step 2: scores.csv, metrics.log, plots/, tables/;
-                            step 3: fastreco.root
-    hough/                  step 3: the figures of MuonFastRecoValidation
-  compare/
-    <reference>_vs_<compare>/   patterns.log, plots/, scores.csv, performance.csv,
-                                event_times.png, stages.png,
-                                hough/ (step 3 with several runs)
+    run_info.txt     settings, input, build, ACTS branch and revision, machine, dates
+    patterns.root    step 1: the patterns, input of step 2
+    performance/     step 1: summary.csv, events.csv, figures, repetitions/
+    logs/            step 1: output of the finder
+    validation/      step 2: scores.csv, metrics.log, plots/, tables/
+    hough/           step 4
+  compare/<reference>_vs_<compare>/    step 3, and step 4 with several runs
 ```
 
-## Two steps
+## The entry points
 
-```text
-STEP 1  scripts/run/run_finder.sh             run the finder     -> results/<host>/<name>/
-STEP 2  scripts/validation/run_validation.sh  judge the patterns -> results/<host>/<name>/validation/
-```
-
-Step 1 is the only place the finder runs. Step 2 reads what step 1 wrote and
-never starts the finder, so it needs no ACTS build and no tracking geometry and
-can be repeated, changed or run on another machine for free. A change to the
-definition of "the pattern found the muon" never requires running the finder
-again. Both always redo everything: step 1 replaces the earlier run of the same
-name, which also removes its validation, because it would no longer belong to the
-new patterns.
-
-### Step 1: run the finder
+### 1. `run_finder.sh`: run the pattern finder
 
 ```bash
-source ~/cern/env_setup.sh
-scripts/run/run_finder.sh --config configs/cpu_pg0.conf
+scripts/run/run_finder.sh --config configs/cuda_pg200.conf --name cuda_v2_pg200_all
 ```
 
-Runs `bin/ActsUnitTestGlobalPatternFinderData` over the sample, once per
-repetition. Each repetition times every call of the finder and writes one row per
-event; the first one also writes the pattern file. The timer wraps the finder call
-only, so writing the patterns is not part of the measurement, and the finder logs
-at WARNING because its own messages are. Defaults: sample PG0, 500 events, 3
-repetitions, `../acts/build`.
+Runs the CPU or GPU data test of ACTS over the sample, once per repetition (default
+3). Each repetition times every call of the pattern finder and writes one row per
+event; reading the input and writing the patterns are outside the timed region,
+and the one-off GPU setup is timed apart. The first repetition also writes the
+patterns. `/usr/bin/time` records the process's CPU time and memory, and for the
+GPU `nvidia-smi` samples its load, memory, power and clock.
+`performance/summary.csv` then holds, per repetition, the mean, median and
+slowest time per event, the events per second, the time of each GPU stage and the
+resource usage. A new run of the same name replaces the old one, its validation
+included.
 
-The Sequencer entry point of ACTS,
-`Examples/Scripts/Python/muon_global_pattern_finder.py`, reports a per
-component total for a whole run and is there to be run by hand when that view
-is wanted.
+How the times are taken and what they mean: [docs/benchmarking.md](docs/benchmarking.md).
 
-### Step 2: validate
+### 2. `run_validation.sh`: judge the patterns
 
 ```bash
-scripts/validation/run_validation.sh --name cpu_pg0_all
+scripts/validation/run_validation.sh --name cuda_v2_pg200_all
 ```
 
-Reads `results/<host>/<name>/patterns.root` and the input n-tuple (named in
-`run_info.txt`) and writes tables, `scores.csv` and the physics plots into
-`results/<host>/<name>/validation/`.
+Reads the run's `patterns.root` and the truth of its n-tuple and writes into
+`validation/`:
 
-### Step 3 (optional): the plotting package
+- `tables/`: one row per truth muon, per pattern, and per pattern and chamber
+  (`build_validation_tables.py`);
+- `scores.csv` and `metrics.log`: efficiency, duplicates, fakes, purity and the
+  angular residuals (`compute_metrics.py`);
+- `plots/`: efficiency against pT and eta, the composition of the patterns, the
+  pulls of their hits and their direction (`make_plots.py`).
 
-`MuonFastRecoValidation`, in houghidipuffvalidation (branch `LeonardoDev`), draws
-the efficiency, the fake rate and the hit and station plots of the ATLAS muon
-group. The script first writes the package's n-tuple, `validation/fastreco.root`,
-from the tables of step 2, and rewrites it only when the tables are newer, so
-step 2 does not pay for it when these plots are not wanted. It needs an Athena
-release, which the LCG environment is not, so it runs in its own shell and its
-results are copied into the run's folder by the script:
+The definitions are those of Athena's MuonFastRecoValidation, transcribed in
+`gpfval.py`; [docs/validation.md](docs/validation.md) has each one and where it
+comes from.
 
-```bash
-setupATLAS
-cd ~/cern/muon-hough-validation          # the build directory of the package
-asetup --restore
-source x86_64-el9-gcc15-opt/setup.sh
-cd ~/cern/acts-gpf-utilities
-scripts/validation/run_hough_plots.sh cpu_pg0_all
-```
-
-One name writes into `results/<host>/<name>/hough/`. Several names draw one curve each
-and write into `results/<host>/compare/<first>_vs_<second>/hough/`; they have to be of
-the same sample, n-tuple and event count, as for `run_compare.sh`:
-
-```bash
-scripts/validation/run_hough_plots.sh cpu_before cpu_after
-```
-
-The executable takes its inputs from the command line, so changing what is drawn
-needs no rebuild:
-
-```text
-FastRecoValidation [--plot-dir DIR] [--out DIR] [--sample-name TEXT] [LABEL=]FILE.root ...
-```
-
-The plots that come from the reconstructed muons, the resolutions and the charge
-and `MuonEff*`, are empty, since the finder stops at the patterns. The fake rate
-and the efficiency on the patterns are drawn.
-
-### Comparison (after the fact)
+### 3. `run_compare.sh`: two runs side by side
 
 ```bash
 scripts/compare/run_compare.sh --reference cpu_pg0_all --compare cuda_v2_pg0_all
 ```
 
-Takes two runs by name. The patterns of the two give the hit-by-hit gate, their
-validations the overlaid figures and the metrics, their performance the speedup
-and resource table, all in `results/<host>/compare/<reference>_vs_<compare>/`. It runs no finder, and
-a part is skipped when one of the runs lacks what it needs. Only compatible runs
-are compared: the same sample, the same n-tuple and the same event count, read
-from the `run_info.txt` of each. Otherwise it stops and says what differs.
+Writes into `results/<host>/compare/<reference>_vs_<compare>/` whatever both runs
+have: the timing and resources with the speedup (`performance.csv`, figures), the
+metrics with their difference (`scores.csv`), the validation figures overlaid
+(`plots/`), and the patterns compared hit by hit (`patterns.log`). For the last,
+`compare_patterns.py` pairs each pattern with the pattern of the other run that
+shares most hits with it, and reports the shared, lost and gained hits, the
+Jaccard index (shared hits over the hits in either pattern), and the patterns
+left without a partner. The hit-by-hit comparison shows how far two runs differ;
+the metrics show whether that matters for the physics.
 
-The stages inside step 2, which can also be run one by one on the files of a run:
+Only runs over the same sample, n-tuple and number of events are compared.
 
-### 1. The validation tables
+### 4. `run_hough_plots.sh`: the MuonFastRecoValidation figures
 
-```bash
-scripts/validation/build_validation_tables.py results/<host>/cpu_pg0_all/patterns.root \
-  data/ParticleGun_MU0.root results/<host>/cpu_pg0_all/validation/tables
-```
-
-Three parquet tables. Nothing is extracted that no test consumes, and no
-tracking geometry is involved: the hits and the truth lines are both given in
-the frame of their spectrometer sector.
-
-| table | one row per | contents |
-| --- | --- | --- |
-| `muons` | truth muon | pt, eta, phi, and how many of its surfaces produced a hit |
-| `patterns` | pattern | which muon it belongs to, what it is made of, its direction |
-| `pattern_chamber` | pattern and chamber | how far its hits sit from the muon's path |
-
-Of the 36 branches in the truth tree it reads 7, and of the 25 in the space
-point tree it reads 8. What each test needs and why is in
-[docs/validation.md](docs/validation.md).
-
-### 2. The metrics
+The efficiency, purity, fake and station plots of the ATLAS muon group, drawn by
+`MuonFastRecoValidation` of
+[houghidipuffvalidation](https://gitlab.cern.ch/atlas-muon-software/houghidipuffvalidation)
+(branch `LeonardoDev`). The script converts the run's validation tables into the
+package's n-tuple (`to_fastreco_tuple.py`) and runs it. It needs an Athena release
+set up in its own shell, without `env_setup.sh`:
 
 ```bash
-scripts/validation/compute_metrics.py results/<host>/cpu_pg0_all/validation/tables \
-  --sample PG0 --implementation cpu_pg0_all --scan --output scores.csv
+setupATLAS
+cd <build directory of houghidipuffvalidation>
+asetup --restore
+source x86_64-el9-gcc15-opt/setup.sh
+cd ~/cern/acts-gpf-utilities
+scripts/validation/run_hough_plots.sh cpu_pg0_all cuda_v2_pg0_all --labels CPU,GPU
 ```
 
-Applies the definitions and appends one row to the csv, writing `muon_flags` and
-`pattern_flags` next to the tables. The matching criterion is ACTS's, from
-`TrackTruthMatcher`: a majority of the muon's surfaces *and* a majority of the
-pattern's hits, both at 0.5. `--scan` shows how the numbers move with it.
+One run writes into its `hough/`; several runs, one curve each, into
+`compare/<first>_vs_<second>.../hough/`.
 
-### 3. The figures
+### 5. `run_throughput.sh`: events per second against threads
 
 ```bash
-scripts/validation/make_plots.py results/<host>/cpu_pg0_all/validation/tables \
-  results/<host>/cuda_v2_pg0_all/validation/tables \
-  --labels cpu_pg0_all cuda_v2_pg0_all --output-dir plots
+scripts/run/run_throughput.sh --config configs/cuda_pg200.conf --name throughput_cuda_pg200 --events 1000
+scripts/compare/plot_throughput.py results/<host>/throughput_cpu_pg200 results/<host>/throughput_cuda_pg200 \
+  --output results/<host>/compare/throughput_pg200.png
 ```
 
-One figure per test, with the quantities of that test side by side:
+Runs the throughput case of the data test: the events are read into memory, then
+run on 1, 2, 4, 8 and 12 threads sharing one pattern finder, each thread taking
+the next event. Every thread count must find the same number of patterns per
+event as one thread. `throughput.csv` holds the events per second, the CPU cores
+used and, for the GPU, its load during each pass. Each GPU event in flight gets
+its own fixed workspace (`--workspace-mb`, default 2048), so the patterns do not
+depend on the thread count.
 
-```text
-efficiency.png     against truth pT and truth eta
-composition.png    purity, selectivity, mismatched fraction
-pulls.png          how far the hits sit from the muon's path
-direction.png      the eta residual, and the phi residual
-```
+## Results in this repository
 
-Fakes and duplicates are counts and live in the csv. What each panel means is
-in [docs/validation.md](docs/validation.md). Several table directories are
-overlaid, which is how CUDA is compared with the CPU reference.
+`results/at-tdaq-mldev02/` (RTX 5000 Ada, AMD EPYC 7272) holds the runs of the
+evaluation, all over the full samples:
 
-### 4. Comparison of two pattern files
+| runs | what |
+| --- | --- |
+| `cpu_<sample>_all`, `cuda_v2_<sample>_all` | CPU reference and GPU v2, default settings, 3 repetitions |
+| `cuda_v1_<sample>_all` | the first GPU version |
+| `*_innerseeds_all`, `*_mdtseeds_all` | seeding also from the inner station, from MDT hits |
+| `throughput_cpu_pg200`, `throughput_cuda_pg200` | throughput, 1 to 12 threads |
+| `compare/` | the comparisons and the MuonFastRecoValidation figures of these runs |
 
-```bash
-scripts/validation/compare_patterns.py results/<host>/cpu_pg0_all/patterns.root \
-  results/<host>/cuda_v2_pg0_all/patterns.root
-```
-
-Two runs over the same space points, compared. Nothing in it knows which
-implementation wrote either file: the only requirement is that both runs read
-the same n-tuple through the same reader. Comparing CUDA against the CPU
-reference is one use of it; comparing two CPU runs across a change to the
-finder, or two settings of the same run, is the same operation.
-
-The hit is what ties the two files together, named by its place in the input
-container — bucket and index within the bucket. That name is a property of the
-input and not of the run, so it is stable across runs and independent of memory
-addresses. Neither the order of the hits in a pattern nor the order of the
-patterns in an event carries meaning.
-
-Equality is not required. The patterns are paired with each other first,
-greedily on the hits they share, and compared afterwards, so a pattern that lost
-one borderline hit stays one pattern with a hit difference instead of being
-reported as one missing and one appeared.
-
-Per paired pattern: shared, lost and gained hits, their Jaccard overlap, and the
-differences in theta, phi, sector, the three layer counts and the mean
-normalized residual. Per run: the patterns paired with nothing. Events only one
-run processed are named and then excluded, since counting their patterns as lost
-would say nothing about the patterns. `--output` writes the pair table as
-parquet for plotting.
-
-The exit code is non-zero when the agreement falls below `--min-matched`,
-`--min-jaccard` or `--tolerance`. The defaults demand exact agreement, which is
-what a pure reordering of the same arithmetic gives; loosen them deliberately
-once the CUDA version is known to differ, rather than ignoring a red exit.
-`scripts/compare/run_compare.sh` runs it over the patterns of two runs.
-
-It answers a different question from the figures of step 2. This one asks how far the two runs
-drifted apart, hit by hit; the overlaid figures ask whether a run that drifted is
-still as good physically. A red exit here is a reason to look at the figures, not
-a verdict on its own.
+`results/at-tdaq-mldev01/` (RTX A5000, AMD EPYC 7302) repeats the default CPU and
+GPU v2 runs on a second machine. The `run_info.txt` of each run names the ACTS
+revision it was made with.
 
 ## How the validation works
 
 ### Truth association
 
 `MuonFastRecoTester` associates a measurement with a truth particle through the
-sim hit behind it, `getTruthMatchedHit`. The export carries no such link, so a
-hit belongs to a muon here when its geometry identifier is one of the
-identifiers of that muon's truth segments, `Segments_hitGeoIds`, which
-`TruthSegmentWriter` fills with the surfaces of exactly those sim hits.
-
-The two differ in one direction only: a wrong hit on a right surface counts as
-matched here and never does in Athena. An MDT identifier is a tube and a strip
-identifier a gas gap, so the surface is fine-grained, but the statement is about
-surfaces and not about hits and should be quoted that way next to Athena's
-numbers.
+sim hit behind it. The export carries no such link, so a hit belongs to a muon
+here when its geometry identifier is one of the identifiers of that muon's truth
+segments, `Segments_hitGeoIds`, which `TruthSegmentWriter` fills with the
+surfaces of exactly those sim hits. The two differ in one direction only: a wrong
+hit on a right surface counts as matched here and never does in Athena. An MDT
+identifier is a tube and a strip identifier a gas gap, so the surface is
+fine-grained, but the statement is about surfaces and should be quoted that way
+next to Athena's numbers.
 
 ### Which muon a pattern belongs to
 
 The majority rule of `fillGlobPatternInfo`: the muon owning the most hits of the
-pattern, decided over the whole pattern and not per station. The per-station
-split exists in the tables for the analysis, exactly as it does in Athena.
+pattern, decided over the whole pattern.
 
 ### The truth denominator
 
 Counted from the space points that exist and are matched, not from the truth
-segments, because "we have sim hits that haven't made it into spacepoints due to
-inefficiencies" (`MuonFastRecoTester.cxx`). Hits are deduplicated per layer of a
-sector with the MDT straws exempt, the layer being the `detLayer` field of the
-muon identifier, which the exporter fills with `sectorLayerNum()` — the quantity
-Athena deduplicates on.
-
-The pattern side is not deduplicated, in Athena either, so a ratio of the two
-can exceed one where a layer holds several hits.
+segments, since not every sim hit makes a space point. Hits are deduplicated per
+layer of a sector, with the MDT straws exempt, as in Athena.
 
 ### What counts as found
 
-The definitions of `MuonFastRecoValidation`, transcribed in `gpfval.py`, so that
-the efficiency and the fake rate are the numbers its plots show for the same
-patterns. A truth muon enters the efficiency when it lies inside |eta| < 2.4 and
-above 10 GeV and left enough hits (two stations with four bending hits each, two
-trigger hits in the middle and outer layers, eight precision hits). A pattern
-matches its muon when it crosses more than half of the muon's stations and holds
-more than half of its bending hits; the match with the most bending hits stands
-for the muon, and a pattern that is not that match is a fake.
-[docs/validation.md](docs/validation.md) has the full definition and where each
-number comes from.
+A truth muon enters the efficiency when it lies within |eta| < 2.4, above 10 GeV,
+and left enough hits (two stations with four bending hits each, two trigger hits
+in the middle and outer layers, eight precision hits). A pattern matches its muon
+when it crosses more than half of the muon's stations and holds more than half of
+its bending hits; the match with the most bending hits stands for the muon, and a
+pattern that is not that match is a fake.
 
 ### The angular residuals
 
-A pattern's theta is the polar angle of the global position of its seed hit,
-`patTheta{VectorHelpers::theta(seed->globalPosition(gctx))}`, and is never
-refitted. It is the angle of a point of the trajectory, not the direction of
-one, so the residuals are
-
-| residual | against |
-| --- | --- |
-| `dThetaSeg`, `dPhiSeg` | the position of the truth segment sharing the most identifiers with the pattern; the same kind of quantity, free of the bending |
-| `dEtaMuon`, `dPhiMuon` | the truth muon at production, the pair Athena writes as `pat_Eta` and `gen_Eta`; the toroid bends the muon in between, so this is a sanity check |
-
-`Segments_dirTheta` is deliberately unused: it is the direction of the segment,
-which the pattern does not estimate.
+A pattern's theta is that of the global position of its seed hit and is never
+refitted, so it is compared with the position of the truth segment sharing the
+most identifiers with it (`dThetaSeg`, `dPhiSeg`). The comparison with the truth
+muon at production (`dEtaMuon`, `dPhiMuon`) is only a sanity check, since the
+toroid bends the muon in between.
 
 ## Known limits
 
-- No pile-up truth particles. Both particle-gun samples carry only the one or
-  two gun muons, so Athena's pile-up category cannot be reproduced and a pattern
-  built from pile-up hits in MU200 is counted as a fake. Its hits appear as
-  `nUnmatchedHits` of the pattern, which is the number to watch.
-- sTGC precision. The export does not carry the channel type, so an sTGC space
-  point counts as precision only when it measures eta alone. Athena calls a
-  strip a precision hit either way.
-- Athena demands, for a space point measuring both coordinates, that the second
-  measurement carries the same truth link before counting it as a phi hit. One
-  identifier covers the whole space point here, so a matched two dimensional hit
-  counts for both coordinates.
+- No pile-up truth particles: both samples carry only the gun muons, so a pattern
+  built from pile-up hits in PG200 counts as a fake. Its hits appear as
+  `nUnmatchedHits`.
+- The export does not carry the sTGC channel type, so an sTGC space point counts
+  as precision only when it measures eta alone.
+- One identifier covers a whole space point, so a matched two-dimensional hit
+  counts for both coordinates; Athena checks the second measurement's truth link
+  separately.
 
-## Planned
+## Repository layout
 
-- energy measurements, once the CUDA version exists.
+```text
+scripts/
+  gpf_common.sh                 shared: flags, configs, results folder, python
+  fix_ntuple_covariance.py      corrects a newly dumped n-tuple (see Inputs)
+  run/
+    run_finder.sh               step 1
+    analyze_performance.sh      the performance summary of a run (called by step 1)
+    aggregate_performance.py    per-event csv and resources -> summary.csv
+    plot_performance.py         time against occupancy
+    plot_stages.py              where the time of a GPU event goes
+    run_throughput.sh           step 5
+    throughput_gpu.py           the GPU's load during each throughput pass
+  validation/
+    run_validation.sh           step 2
+    gpfval.py                   the definitions, transcribed from ACTS and Athena
+    build_validation_tables.py  patterns + truth -> tables
+    compute_metrics.py          tables -> scores
+    make_plots.py               tables -> figures
+    compare_patterns.py         two pattern files, hit by hit
+    run_hough_plots.sh          step 4
+    to_fastreco_tuple.py        tables -> MuonFastRecoValidation n-tuple
+  compare/
+    run_compare.sh              step 3
+    compare_performance.py      two performance summaries -> speedup table
+    compare_scores.py           two score tables -> differences
+    plot_throughput.py          events per second against threads, several runs
+configs/                        one config per backend and sample
+docs/
+  acts_changes.md               the ACTS branches and files
+  benchmarking.md               how the times are taken and read
+  validation.md                 every metric, its definition and source
+  athena_deviations.md          where the example differs from Athena
+results/<host>/                 the runs (summaries tracked)
+data/                           the inputs (not tracked)
+```
 
 ## Reproducibility
 
-`results/<host>/<name>/run_info.txt` records the settings of a run, the n-tuple, the
-build, the ACTS branch and revision (with a note when the checkout had local
-changes), the revision of this repository, the machine, the GPU and the dates.
-Quote it with any published number, and add the build configuration, which it
-does not hold.
+`results/<host>/<name>/run_info.txt` records the settings of a run, its input
+files, the build, the ACTS branch and revision (noting local changes), the
+revision of this repository, the machine, the GPU and the dates. Quote it with
+any published number, together with the build configuration, which it does not
+hold.

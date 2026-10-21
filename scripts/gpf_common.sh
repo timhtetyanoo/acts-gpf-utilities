@@ -26,7 +26,6 @@
 #   --sample NAME            label of the input, e.g. PG0, PG200       GPF_SAMPLE
 #   --ntuple FILE            space point n-tuple                       GPF_NTUPLE
 #   --events N|all           events per repetition                     GPF_EVENTS
-#   --profile                record the stages (profiling build only)  GPF_PROFILE
 #   --repetitions N          timing repetitions                        GPF_REPETITIONS
 #   --backend cpu|cuda       where the finder runs                     GPF_BACKEND
 #   --workspace-mb N         GPU memory for the patterns of an event   GPF_WORKSPACE_MB
@@ -42,7 +41,6 @@
 #                            muon's stations                           GPF_STATION_EFF_THR
 #   --bending-eff-thr X      a match holds more than this fraction of the
 #                            muon's bending hits                       GPF_BENDING_EFF_THR
-#   --log-level LEVEL        finder log level                          GPF_LOG_LEVEL
 #   --python PATH            interpreter                               PYTHON
 #   -h, --help               the header of the script
 gpf_parse_args() {
@@ -57,7 +55,6 @@ gpf_parse_args() {
       --sample) flags[GPF_SAMPLE]="${2:?}"; shift ;;
       --ntuple) flags[GPF_NTUPLE]="${2:?}"; shift ;;
       --events) flags[GPF_EVENTS]="${2:?--events needs a number or 'all'}"; shift ;;
-      --profile) flags[GPF_PROFILE]=1 ;;
       --repetitions) flags[GPF_REPETITIONS]="${2:?}"; shift ;;
       --backend) flags[GPF_BACKEND]="${2:?--backend needs cpu or cuda}"; shift ;;
       --workspace-mb) flags[GPF_WORKSPACE_MB]="${2:?}"; shift ;;
@@ -70,7 +67,6 @@ gpf_parse_args() {
       --results-dir) flags[GPF_RESULTS_DIR]="${2:?}"; shift ;;
       --station-eff-thr) flags[GPF_STATION_EFF_THR]="${2:?}"; shift ;;
       --bending-eff-thr) flags[GPF_BENDING_EFF_THR]="${2:?}"; shift ;;
-      --log-level) flags[GPF_LOG_LEVEL]="${2:?}"; shift ;;
       --python) flags[PYTHON]="${2:?}"; shift ;;
       -h | --help)
         # the leading comment block of the script
