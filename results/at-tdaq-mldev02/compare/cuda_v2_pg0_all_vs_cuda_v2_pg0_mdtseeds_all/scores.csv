@@ -1,0 +1,27 @@
+metric,cuda_v2_pg0_all,cuda_v2_pg0_mdtseeds_all,difference (cuda_v2_pg0_mdtseeds_all minus cuda_v2_pg0_all)
+sample,PG0,PG0,
+run,cuda_v2_pg0_all,cuda_v2_pg0_mdtseeds_all,
+match needs more than this fraction of the muon's stations,0.5,0.5,0.0
+match needs more than this fraction of the muon's bending hits,0.5,0.5,0.0
+events read,51000,51000,0
+events with patterns,50694,50931,237
+truth muons in the events,100550,100550,0
+truth muons selected for the efficiency,84650,84650,0
+selected muons found,83198,84247,1049
+patterns (all events),124911,140704,15793
+efficiency (found / selected muons),0.9828,0.9952,0.0124
+duplicates per found muon,0.03424,0.04499,0.01075
+fake rate (event average; duplicates count as fakes),0.1004,0.1069,0.0065
+fake fraction (all patterns; duplicates count as fakes),0.2567,0.3018,0.0451
+patterns matching no muon (fraction of all patterns),0.2251,0.2568,0.0317
+patterns per event read,2.449,2.759,0.31
+patterns matching no muon per event read,0.5514,0.7085,0.1571
+completeness of found muons (mean),0.8343,0.8456,0.0113
+purity of matched patterns (mean),0.9164,0.9106,-0.0058
+hits from another muon in matched patterns (mean fraction),0.0,0.0,0.0
+hits taken of those in the pattern's buckets (mean fraction),0.7027,0.7034,0.0007
+mean squared pull of matched patterns about the truth line (median),5.808,8.677,2.869
+eta of pattern minus truth (mean),-5.541e-05,-4.91e-06,5.05e-05
+eta of pattern minus truth (std),0.0122,0.0175,0.0053
+phi of pattern minus truth (mean; rad),-1.514e-05,-1.784e-05,-2.7e-06
+phi of pattern minus truth (std; rad),0.0212,0.02219,0.00099

@@ -1,0 +1,20 @@
+name:          throughput_cuda_pg200
+sample:        PG200
+ntuple:        /home/hoo/cern/acts-gpf-utilities/data/ParticleGun_MU200.root
+geometry:      /home/hoo/cern/acts-gpf-utilities/data/ActsTrackingGeometry_PG200.json
+events:        all
+threads:       1 2 4 8 12
+backend:       cuda
+workspace:     2048 MiB per event in flight
+mdt seeds:     0
+inner seeds:   0
+build:         /home/hoo/cern/acts/build_cuda
+executable:    /home/hoo/cern/acts/build_cuda/bin/ActsUnitTestCudaGlobalPatternFinderData (2026-10-20 14:15:14)
+acts branch:   cuda-glob-pat-finder-v2
+acts revision: f62033097 (+ local changes)
+utilities rev: 71c52d4
+host:          at-tdaq-mldev02
+cpu:           AMD EPYC 7272 12-Core Processor, 24 threads
+gpu:           NVIDIA RTX 5000 Ada Generation
+started:       2026-10-20 14:25:05
+finished:      2026-10-20 14:32:00

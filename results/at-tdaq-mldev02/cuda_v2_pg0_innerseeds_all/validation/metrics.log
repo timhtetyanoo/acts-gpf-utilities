@@ -1,0 +1,41 @@
+Both match thresholds set to the same value:
+      threshold  efficiency  fake rate  duplicates per found muon
+            0.1      0.9982     0.0998                      0.243
+            0.2      0.9982     0.0998                      0.214
+            0.3      0.9981     0.0999                      0.170
+            0.4      0.9976     0.1003                      0.105
+            0.5      0.9928     0.1032                      0.049
+            0.6      0.9777     0.1131                      0.020
+            0.7      0.9113     0.1626                      0.005
+            0.8      0.6625     0.3593                      0.001
+            0.9      0.3476     0.6285                      0.000
+            1.0      0.0000     1.0000                      0.000
+
+sample                                                               PG0
+run                                                                  cuda_v2_pg0_innerseeds_all
+match needs more than this fraction of the muon's stations           0.5
+match needs more than this fraction of the muon's bending hits       0.5
+events read                                                          51000
+events with patterns                                                 50933
+truth muons in the events                                            100550
+truth muons selected for the efficiency                              84650
+selected muons found                                                 84041
+patterns (all events)                                                135116
+efficiency (found / selected muons)                                  0.9928056704075605
+duplicates per found muon                                            0.04854773265429969
+fake rate (event average; duplicates count as fakes)                 0.10324405240082958
+fake fraction (all patterns; duplicates count as fakes)              0.27389058290653956
+patterns matching no muon (fraction of all patterns)                 0.2300097693833447
+patterns per event read                                              2.6493333333333333
+patterns matching no muon per event read                             0.6093725490196078
+completeness of found muons (mean)                                   0.8470907665302438
+purity of matched patterns (mean)                                    0.9160833130731916
+hits from another muon in matched patterns (mean fraction)           0.0
+hits taken of those in the pattern's buckets (mean fraction)         0.7088363160608322
+mean squared pull of matched patterns about the truth line (median)  9.097886752094897
+eta of pattern minus truth (mean)                                    -5.9768326170145574e-05
+eta of pattern minus truth (std)                                     0.010259083619061934
+phi of pattern minus truth (mean; rad)                               -0.00020811915521705684
+phi of pattern minus truth (std; rad)                                0.023114476528358113
+
+results/at-tdaq-mldev02/cuda_v2_pg0_innerseeds_all/validation/scores.csv

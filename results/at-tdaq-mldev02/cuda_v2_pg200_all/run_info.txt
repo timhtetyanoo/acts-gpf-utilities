@@ -4,15 +4,16 @@ ntuple:        /home/hoo/cern/acts-gpf-utilities/data/ParticleGun_MU200.root
 geometry:      /home/hoo/cern/acts-gpf-utilities/data/ActsTrackingGeometry_PG200.json
 events:        all
 repetitions:   3
-first event:   0
 backend:       cuda
-batch size:    default
+workspace:     half of the free GPU memory
+mdt seeds:     0
+inner seeds:   0
 build:         /home/hoo/cern/acts/build_cuda
-executable:    /home/hoo/cern/acts/build_cuda/bin/ActsUnitTestCudaGlobalPatternFinderData (2026-10-18 19:18:01)
+executable:    /home/hoo/cern/acts/build_cuda/bin/ActsUnitTestCudaGlobalPatternFinderData (2026-10-20 14:15:14)
 acts branch:   cuda-glob-pat-finder-v2
-acts revision: 70562d13d
-utilities rev: e30db88
+acts revision: a3b9bb983
+utilities rev: aed3014
 host:          at-tdaq-mldev02
 gpu:           NVIDIA RTX 5000 Ada Generation
-started:       2026-10-18 21:15:59
-finished:      2026-10-18 21:26:09
+started:       2026-10-21 11:44:47
+finished:      2026-10-21 11:55:39

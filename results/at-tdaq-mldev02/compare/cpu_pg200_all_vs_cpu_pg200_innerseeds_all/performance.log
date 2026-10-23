@@ -1,0 +1,10 @@
+                               measure  cpu_pg200_all  cpu_pg200_innerseeds_all  speedup (above 1: cpu_pg200_innerseeds_all is faster)
+              mean time per event (ms)       7.819000                 63.550000                                                  0.123
+            median time per event (ms)       5.794000                 41.970000                                                  0.138
+               p90 time per event (ms)       8.204000                 73.260000                                                  0.112
+                    slowest event (ms)    6327.000000              50850.000000                                                  0.124
+      median time per space point (ms)       0.000909                  0.006645                                                  0.137
+                 throughput (events/s)     127.900000                 15.700000                                                  0.123
+                 process wall time (s)     251.300000                945.400000                                                    NaN
+CPU cores in use by the process (mean)       0.996100                  0.996600                                                    NaN
+      peak memory of the process (MiB)    2549.000000               2553.000000                                                    NaN

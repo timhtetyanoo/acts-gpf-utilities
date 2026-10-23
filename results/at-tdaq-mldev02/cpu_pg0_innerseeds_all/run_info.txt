@@ -1,0 +1,18 @@
+name:          cpu_pg0_innerseeds_all
+sample:        PG0
+ntuple:        /home/hoo/cern/acts-gpf-utilities/data/ParticleGun_MU0.root
+geometry:      /home/hoo/cern/acts-gpf-utilities/data/ActsTrackingGeometry_PG0.json
+events:        all
+repetitions:   1
+backend:       cpu
+mdt seeds:     0
+inner seeds:   1
+build:         /home/hoo/cern/acts/build
+executable:    /home/hoo/cern/acts/build/bin/ActsUnitTestGlobalPatternFinderData (2026-10-19 14:38:11)
+acts branch:   cuda-glob-pat-finder-v2
+acts revision: f62033097
+utilities rev: 71c52d4
+host:          at-tdaq-mldev02
+gpu:           NVIDIA RTX 5000 Ada Generation
+started:       2026-10-19 19:36:00
+finished:      2026-10-19 19:59:51

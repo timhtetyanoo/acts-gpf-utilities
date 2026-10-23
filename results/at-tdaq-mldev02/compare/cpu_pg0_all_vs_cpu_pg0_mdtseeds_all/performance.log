@@ -1,0 +1,10 @@
+                               measure  cpu_pg0_all  cpu_pg0_mdtseeds_all  speedup (above 1: cpu_pg0_mdtseeds_all is faster)
+              mean time per event (ms)     4.270000              12.33000                                              0.346
+            median time per event (ms)     0.564000               1.75800                                              0.321
+               p90 time per event (ms)     1.603000               4.40800                                              0.364
+                    slowest event (ms) 16990.000000          128600.00000                                              0.132
+      median time per space point (ms)     0.006624               0.02068                                              0.320
+                 throughput (events/s)   234.200000              81.10000                                              0.346
+                 process wall time (s)   242.500000             656.30000                                                NaN
+CPU cores in use by the process (mean)     0.995600               0.99640                                                NaN
+      peak memory of the process (MiB)  2404.000000            2406.00000                                                NaN

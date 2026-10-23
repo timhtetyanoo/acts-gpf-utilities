@@ -1,0 +1,14 @@
+                               measure  cpu_pg0_all  cuda_v1_pg0_all  speedup (above 1: cuda_v1_pg0_all is faster)
+              mean time per event (ms)     4.270000         145.6000                                        0.0293
+            median time per event (ms)     0.564000          17.9000                                        0.0315
+               p90 time per event (ms)     1.603000          47.8600                                        0.0335
+                    slowest event (ms) 16990.000000      472700.0000                                        0.0359
+      median time per space point (ms)     0.006624           0.2111                                        0.0314
+                 throughput (events/s)   234.200000           6.9000                                        0.0295
+                 process wall time (s)   242.500000        7453.0000                                           NaN
+CPU cores in use by the process (mean)     0.995600           0.9979                                           NaN
+      peak memory of the process (MiB)  2404.000000        2488.0000                                           NaN
+   GPU utilisation while busy (mean %)          NaN          99.1300                                           NaN
+            GPU memory used (peak MiB)          NaN        1392.0000                                           NaN
+         GPU power while busy (mean W)          NaN          45.8100                                           NaN
+  GPU SM clock while busy (median MHz)          NaN        1155.0000                                           NaN

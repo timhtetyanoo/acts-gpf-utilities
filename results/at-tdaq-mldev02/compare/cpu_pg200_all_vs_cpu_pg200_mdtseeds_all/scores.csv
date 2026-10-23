@@ -1,0 +1,27 @@
+metric,cpu_pg200_all,cpu_pg200_mdtseeds_all,difference (cpu_pg200_mdtseeds_all minus cpu_pg200_all)
+sample,PG200,PG200,
+run,cpu_pg200_all,cpu_pg200_mdtseeds_all,
+match needs more than this fraction of the muon's stations,0.5,0.5,0.0
+match needs more than this fraction of the muon's bending hits,0.5,0.5,0.0
+events read,12000,12000,0
+events with patterns,11986,12000,14
+truth muons in the events,23653,23653,0
+truth muons selected for the efficiency,19923,19923,0
+selected muons found,19382,19721,339
+patterns (all events),63475,352586,289111
+efficiency (found / selected muons),0.9728,0.9899,0.0171
+duplicates per found muon,0.04442,0.06445,0.02003
+fake rate (event average; duplicates count as fakes),0.5468,0.918,0.3712
+fake fraction (all patterns; duplicates count as fakes),0.6589,0.9348,0.2759
+patterns matching no muon (fraction of all patterns),0.6404,0.9283,0.2879
+patterns per event read,5.29,29.38,24.09
+patterns matching no muon per event read,3.388,27.28,23.89
+completeness of found muons (mean),0.8143,0.8225,0.0082
+purity of matched patterns (mean),0.9081,0.8946,-0.0135
+hits from another muon in matched patterns (mean fraction),0.0,0.0,0.0
+hits taken of those in the pattern's buckets (mean fraction),0.4405,0.4327,-0.0078
+mean squared pull of matched patterns about the truth line (median),7.972,11.8,3.828
+eta of pattern minus truth (mean),-9.278e-05,-0.0001164,-2.362e-05
+eta of pattern minus truth (std),0.01274,0.01788,0.00514
+phi of pattern minus truth (mean; rad),-6.494e-06,-0.0001811,-0.0001746
+phi of pattern minus truth (std; rad),0.02271,0.02505,0.00234

@@ -1,0 +1,14 @@
+measure,cpu_pg200_all,cuda_v1_pg200_all,speedup (above 1: cuda_v1_pg200_all is faster)
+mean time per event (ms),7.819,121.1,0.0646
+median time per event (ms),5.794,30.88,0.188
+p90 time per event (ms),8.204,75.01,0.109
+slowest event (ms),6327.0,553900.0,0.0114
+median time per space point (ms),0.000909,0.005019,0.181
+throughput (events/s),127.9,8.3,0.0649
+process wall time (s),251.3,1635.0,
+CPU cores in use by the process (mean),0.9961,0.9976,
+peak memory of the process (MiB),2549.0,2634.0,
+GPU utilisation while busy (mean %),,85.42,
+GPU memory used (peak MiB),,1360.0,
+GPU power while busy (mean W),,44.94,
+GPU SM clock while busy (median MHz),,1155.0,

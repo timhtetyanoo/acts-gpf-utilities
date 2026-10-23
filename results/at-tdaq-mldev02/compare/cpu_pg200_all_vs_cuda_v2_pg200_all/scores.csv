@@ -4,24 +4,24 @@ run,cpu_pg200_all,cuda_v2_pg200_all,
 match needs more than this fraction of the muon's stations,0.5,0.5,0.0
 match needs more than this fraction of the muon's bending hits,0.5,0.5,0.0
 events read,12000,12000,0
-events with patterns,11991,11991,0
+events with patterns,11986,11988,2
 truth muons in the events,23653,23653,0
-truth muons selected for the efficiency,19917,19917,0
-selected muons found,19612,19638,26
-patterns (all events),71132,70868,-264
-efficiency (found / selected muons),0.9847,0.986,0.0013
-duplicates per found muon,0.1025,0.1132,0.0107
-fake rate (event average; duplicates count as fakes),0.5827,0.5863,0.0036
-fake fraction (all patterns; duplicates count as fakes),0.6918,0.6903,-0.0015
-patterns matching no muon (fraction of all patterns),0.656,0.6511,-0.0049
-patterns per event read,5.928,5.906,-0.022
-patterns matching no muon per event read,3.889,3.845,-0.044
-completeness of found muons (mean),0.8485,0.8501,0.0016
-purity of matched patterns (mean),0.9372,0.9305,-0.0067
+truth muons selected for the efficiency,19923,19923,0
+selected muons found,19382,19401,19
+patterns (all events),63475,63218,-257
+efficiency (found / selected muons),0.9728,0.9738,0.001
+duplicates per found muon,0.04442,0.05433,0.00991
+fake rate (event average; duplicates count as fakes),0.5468,0.5497,0.0029
+fake fraction (all patterns; duplicates count as fakes),0.6589,0.6572,-0.0017
+patterns matching no muon (fraction of all patterns),0.6404,0.6354,-0.005
+patterns per event read,5.29,5.268,-0.022
+patterns matching no muon per event read,3.388,3.347,-0.041
+completeness of found muons (mean),0.8143,0.8155,0.0012
+purity of matched patterns (mean),0.9081,0.9043,-0.0038
 hits from another muon in matched patterns (mean fraction),0.0,0.0,0.0
-hits taken of those in the pattern's buckets (mean fraction),0.4178,0.4179,0.0001
-mean squared pull of matched patterns about the truth line (median),12.08,12.37,0.29
-eta of pattern minus truth (mean),-0.0001235,-0.0001271,-3.6e-06
-eta of pattern minus truth (std),0.01319,0.01332,0.00013
-phi of pattern minus truth (mean; rad),2.467e-05,1.036e-05,-1.431e-05
-phi of pattern minus truth (std; rad),0.02353,0.02438,0.00085
+hits taken of those in the pattern's buckets (mean fraction),0.4405,0.4412,0.0007
+mean squared pull of matched patterns about the truth line (median),7.972,7.91,-0.062
+eta of pattern minus truth (mean),-9.278e-05,-7.404e-05,1.874e-05
+eta of pattern minus truth (std),0.01274,0.01281,7e-05
+phi of pattern minus truth (mean; rad),-6.494e-06,3.105e-05,3.754e-05
+phi of pattern minus truth (std; rad),0.02271,0.02307,0.00036

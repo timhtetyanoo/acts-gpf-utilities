@@ -1,0 +1,29 @@
+events                      11986
+patterns reference          63475
+patterns compared           63095
+paired                      62093  (0.9782)
+paired identical            53212
+unpaired reference          1382
+unpaired compared           1002
+jaccard mean                0.958080
+jaccard min                 0.013699
+hits only reference         44861
+hits only compared          49414
+max |dTheta|                7.869e-02
+max |dPhi|                  8.265e-01
+differing sector            622
+differing precision layers  3453
+differing trigger layers    4017
+differing phi layers        3313
+
+least similar pairs (10):
+  event 8731: reference 201 vs compared 92, 1 shared, 32 lost, 40 gained, jaccard 0.0137, dTheta +1.506e-02
+  event 573: reference 65 vs compared 70, 1 shared, 33 lost, 32 gained, jaccard 0.0152, dTheta +1.307e-02
+  event 8731: reference 200 vs compared 513, 1 shared, 43 lost, 16 gained, jaccard 0.0167, dTheta +1.096e-03
+  event 8731: reference 212 vs compared 844, 1 shared, 36 lost, 23 gained, jaccard 0.0167, dTheta -2.251e-02
+  event 573: reference 62 vs compared 9, 1 shared, 32 lost, 25 gained, jaccard 0.0172, dTheta +5.931e-03
+  event 8731: reference 138 vs compared 38, 1 shared, 16 lost, 37 gained, jaccard 0.0185, dTheta +5.128e-02
+  event 8731: reference 139 vs compared 39, 1 shared, 16 lost, 37 gained, jaccard 0.0185, dTheta +5.128e-02
+  event 8731: reference 389 vs compared 182, 1 shared, 31 lost, 22 gained, jaccard 0.0185, dTheta -2.440e-02
+  event 573: reference 86 vs compared 71, 1 shared, 20 lost, 32 gained, jaccard 0.0189, dTheta +1.837e-02
+  event 3035: reference 262 vs compared 84, 1 shared, 34 lost, 16 gained, jaccard 0.0196, dTheta -3.509e-03

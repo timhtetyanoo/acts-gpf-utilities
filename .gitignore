@@ -27,3 +27,7 @@ __pycache__/
 !/results/*/compare/**/plots/*.png
 !/results/*/compare/**/event_times.png
 !/results/*/compare/**/stages.png
+# a throughput run, and the figures that sum up several runs
+!/results/**/throughput.csv
+!/results/**/gpu.csv
+!/results/*/compare/*.png

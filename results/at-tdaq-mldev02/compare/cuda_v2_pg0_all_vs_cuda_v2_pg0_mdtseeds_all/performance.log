@@ -1,0 +1,19 @@
+                               measure  cuda_v2_pg0_all  cuda_v2_pg0_mdtseeds_all  speedup (above 1: cuda_v2_pg0_mdtseeds_all is faster)
+              mean time per event (ms)          2.13800                  2.399000                                                  0.891
+            median time per event (ms)          1.63900                  1.753000                                                  0.935
+               p90 time per event (ms)          2.70500                  2.884000                                                  0.938
+                    slowest event (ms)       1778.00000               3146.000000                                                  0.565
+      median time per space point (ms)          0.01947                  0.020790                                                  0.937
+                 throughput (events/s)        467.80000                416.900000                                                  0.891
+       host before the GPU (median ms)          0.00763                  0.008060                                                  0.947
+               copy to GPU (median ms)          0.00704                  0.007104                                                  0.991
+               GPU kernels (median ms)          1.51700                  1.628000                                                  0.932
+             copy from GPU (median ms)          0.01965                  0.020700                                                  0.949
+        host after the GPU (median ms)          0.04995                  0.052720                                                  0.947
+                 process wall time (s)        134.50000                151.000000                                                    NaN
+CPU cores in use by the process (mean)          0.99580                  0.995600                                                    NaN
+      peak memory of the process (MiB)       2538.00000               2572.000000                                                    NaN
+   GPU utilisation while busy (mean %)         77.68000                 81.910000                                                    NaN
+            GPU memory used (peak MiB)      17480.00000              16420.000000                                                    NaN
+         GPU power while busy (mean W)         46.18000                 48.330000                                                    NaN
+  GPU SM clock while busy (median MHz)       1155.00000               1155.000000                                                    NaN
