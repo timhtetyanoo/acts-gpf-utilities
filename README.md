@@ -47,37 +47,48 @@ data/ActsTrackingGeometry_PG0.json
 data/ActsTrackingGeometry_PG200.json
 ```
 
-Each n-tuple must be used with the geometry exported alongside it.
-
-Some `MuonActsDump` versions write the two local covariances of a space point in
-the wrong order. `scripts/fix_ntuple_covariance.py` corrects such a file into a
-copy. The files in `data/` are already corrected.
-
 ## Usage
 
 ```bash
-scripts/run/run_finder.sh --config configs/cpu_pg0.conf --name cpu_pg0_all
-scripts/run/run_finder.sh --config configs/cuda_pg0.conf --name cuda_v2_pg0_all
-scripts/validation/run_validation.sh --name cpu_pg0_all
-scripts/validation/run_validation.sh --name cuda_v2_pg0_all
-scripts/compare/run_compare.sh --reference cpu_pg0_all --compare cuda_v2_pg0_all
+scripts/run/run_finder.sh \
+  --name cpu_pg0_all \
+  --ntuple data/ParticleGun_MU0.root \
+  --geometry data/ActsTrackingGeometry_PG0.json
 
-scripts/run/run_throughput.sh --config configs/cuda_pg200.conf --name throughput_cuda_pg200 --events all
+scripts/validation/run_validation.sh \
+  --name cpu_pg0_all
+
+scripts/compare/run_compare.sh \
+  --reference cpu_pg0_all \
+  --compare cuda_v2_pg0_all
+
+scripts/run/run_throughput.sh \
+  --name throughput_cpu_pg200 \
+  --ntuple data/ParticleGun_MU200.root \
+  --geometry data/ActsTrackingGeometry_PG200.json
 ```
-
-A configuration in `configs/` sets the backend, the sample and its inputs.
-Command-line options take precedence over the configuration:
 
 | option | |
 | --- | --- |
 | `--name` | name of the run |
+| `--ntuple FILE`, `--geometry FILE` | space point n-tuple and its tracking geometry |
+| `--sample NAME` | label of the input; default is the n-tuple's file name |
 | `--events N\|all`, `--repetitions N` | events per repetition, number of repetitions |
 | `--backend cpu\|cuda`, `--build-dir DIR` | implementation and ACTS build |
-| `--seed-from-mdt`, `--seed-from-inner` | additional seeds from MDT hits or the inner station |
 | `--workspace-mb N` | GPU memory for the patterns of an event |
 | `--threads "1 2 4"` | thread counts of the throughput test |
 
 The full list is in `scripts/gpf_common.sh`.
+
+## Configuration
+
+A file in `configs/` holds the same settings, so a run can be repeated without
+repeating the flags. Command-line options take precedence over the file:
+
+```bash
+scripts/run/run_finder.sh --config configs/cpu_pg0.conf --name cpu_pg0_all
+scripts/run/run_finder.sh --config configs/cuda_pg0.conf --name cuda_v2_pg0_all
+```
 
 ## Results
 
@@ -95,17 +106,6 @@ Only the summaries are tracked in git: `run_info.txt`, `scores.csv`,
 `metrics.log`, `summary.csv`, `throughput.csv` and the figures. Patterns, tables,
 raw timings and logs remain local.
 
-`results/at-tdaq-mldev02/` holds the evaluation on the full samples:
-
-| runs | |
-| --- | --- |
-| `cpu_<sample>_all`, `cuda_v2_<sample>_all` | CPU and GPU, default configuration |
-| `cuda_v1_<sample>_all` | initial GPU implementation |
-| `*_innerseeds_all`, `*_mdtseeds_all` | additional seeds from the inner station or MDT hits |
-| `throughput_cpu_pg200`, `throughput_cuda_pg200` | throughput, 1 to 12 threads |
-
-`results/at-tdaq-mldev01/` repeats the default CPU and GPU runs on a second
-machine.
 
 ## Repository layout
 

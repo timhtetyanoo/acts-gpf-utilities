@@ -29,7 +29,6 @@
 #   GPF_BACKEND       cpu or cuda                      (default: cpu)
 #   GPF_WORKSPACE_MB  GPU memory in MiB for the patterns of each event in
 #                     flight, the same for every thread count (default: 2048)
-#   GPF_SEED_FROM_MDT, GPF_SEED_FROM_INNER   as in run_finder.sh
 #   ACTS_SOURCE_DIR   ACTS source tree                 (default: <this repo>/../acts)
 #   ACTS_BUILD_DIR    build directory                  (default: ${ACTS_SOURCE_DIR}/build)
 #   GPF_RESULTS_DIR   where the runs are kept          (default: <this repo>/results/<host>)
@@ -97,8 +96,6 @@ mkdir -p -- "${run_dir}"
   if [[ "${backend}" == cuda ]]; then
     echo "workspace:     ${workspace_mb} MiB per event in flight"
   fi
-  echo "mdt seeds:     ${GPF_SEED_FROM_MDT:-0}"
-  echo "inner seeds:   ${GPF_SEED_FROM_INNER:-0}"
   echo "build:         ${build_dir}"
   echo "executable:    ${executable} ($(date -r "${executable}" '+%F %T'))"
   echo "acts branch:   $(git -C "${source_dir}" branch --show-current 2>/dev/null || echo unknown)"
@@ -135,8 +132,6 @@ ACTS_GPF_MAX_EVENTS="$(gpf_event_cap "${events}")" \
 ACTS_GPF_THREADS="${threads}" \
 ACTS_GPF_THROUGHPUT="${run_dir}/throughput.csv" \
 ACTS_GPF_WORKSPACE_MB="${workspace_mb}" \
-ACTS_GPF_SEED_FROM_MDT="${GPF_SEED_FROM_MDT:-}" \
-ACTS_GPF_SEED_FROM_INNER="${GPF_SEED_FROM_INNER:-}" \
   "${executable}" --run_test="${test_case}" --log_level=error \
   --report_level=no --color_output=no >"${run_dir}/log.txt" 2>&1 || {
   echo "The throughput test failed; the end of ${run_dir}/log.txt:" >&2

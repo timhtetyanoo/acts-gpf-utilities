@@ -57,9 +57,6 @@
 #   GPF_WORKSPACE_MB  GPU memory in MiB for the patterns of an event; an event
 #                     that needs more keeps the best ones and reports an
 #                     overflow (default: half of the free device memory)
-#   GPF_SEED_FROM_MDT 1: MDT hits seed too             (default: 0)
-#   GPF_SEED_FROM_INNER 1: the inner station seeds too, besides the middle and
-#                     outer ones                       (default: 0)
 #   ACTS_SOURCE_DIR   ACTS source tree                 (default: <this repo>/../acts)
 #   ACTS_BUILD_DIR    build directory                  (default: ${ACTS_SOURCE_DIR}/build)
 #   GPF_RESULTS_DIR   where the runs are kept          (default: <this repo>/results/<host>)
@@ -131,8 +128,6 @@ mkdir -p -- "${run_dir}/performance/repetitions" "${run_dir}/logs"
   if [[ "${backend}" == cuda ]]; then
     echo "workspace:     ${GPF_WORKSPACE_MB:-half of the free GPU memory}${GPF_WORKSPACE_MB:+ MiB}"
   fi
-  echo "mdt seeds:     ${GPF_SEED_FROM_MDT:-0}"
-  echo "inner seeds:   ${GPF_SEED_FROM_INNER:-0}"
   echo "build:         ${build_dir}"
   echo "executable:    ${executable} ($(date -r "${executable}" '+%F %T'))"
   echo "acts branch:   $(git -C "${source_dir}" branch --show-current 2>/dev/null || echo unknown)"
@@ -178,8 +173,6 @@ run_cpp() {
   ACTS_GPF_TIMING="${timing}" \
   ACTS_GPF_OUTPUT="${output}" \
   ACTS_GPF_WORKSPACE_MB="${GPF_WORKSPACE_MB:-}" \
-  ACTS_GPF_SEED_FROM_MDT="${GPF_SEED_FROM_MDT:-}" \
-  ACTS_GPF_SEED_FROM_INNER="${GPF_SEED_FROM_INNER:-}" \
     /usr/bin/time --format='%e %U %S %M' \
     --output="${repetitions_dir}/process_${tag}.txt" \
     "${executable}" --log_level=error --report_level=no --color_output=no \
