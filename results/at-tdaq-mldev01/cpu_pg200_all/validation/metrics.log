@@ -1,14 +1,14 @@
 Both match thresholds set to the same value:
       threshold  efficiency  fake rate  duplicates per found muon
-            0.1      0.9953     0.5380                      0.294
-            0.2      0.9952     0.5381                      0.249
-            0.3      0.9947     0.5383                      0.189
-            0.4      0.9903     0.5400                      0.107
-            0.5      0.9692     0.5481                      0.038
-            0.6      0.9222     0.5669                      0.012
-            0.7      0.7966     0.6213                      0.002
-            0.8      0.5119     0.7461                      0.000
-            0.9      0.2186     0.8820                      0.000
+            0.1      0.9953     0.5380                      0.297
+            0.2      0.9952     0.5380                      0.254
+            0.3      0.9948     0.5383                      0.197
+            0.4      0.9909     0.5397                      0.116
+            0.5      0.9728     0.5468                      0.044
+            0.6      0.9327     0.5627                      0.016
+            0.7      0.8272     0.6083                      0.004
+            0.8      0.5567     0.7271                      0.001
+            0.9      0.2446     0.8705                      0.000
             1.0      0.0000     1.0000                      0.000
 
 sample                                                               PG200
@@ -19,23 +19,23 @@ events read                                                          12000
 events with patterns                                                 11986
 truth muons in the events                                            23653
 truth muons selected for the efficiency                              19923
-selected muons found                                                 19309
+selected muons found                                                 19382
 patterns (all events)                                                63475
-efficiency (found / selected muons)                                  0.9691813481905336
-duplicates per found muon                                            0.03822051892899684
-fake rate (event average; duplicates count as fakes)                 0.5481286501290142
-fake fraction (all patterns; duplicates count as fakes)              0.6601496652225286
-patterns matching no muon (fraction of all patterns)                 0.6439858211894447
+efficiency (found / selected muons)                                  0.9728454550017568
+duplicates per found muon                                            0.04442266020018574
+fake rate (event average; duplicates count as fakes)                 0.5467661130408181
+fake fraction (all patterns; duplicates count as fakes)              0.6588893265064987
+patterns matching no muon (fraction of all patterns)                 0.6404096100827097
 patterns per event read                                              5.289583333333334
-patterns matching no muon per event read                             3.406416666666667
-completeness of found muons (mean)                                   0.8034925295486585
-purity of matched patterns (mean)                                    0.8962155955421791
+patterns matching no muon per event read                             3.3875
+completeness of found muons (mean)                                   0.8142832114816525
+purity of matched patterns (mean)                                    0.9080510438710031
 hits from another muon in matched patterns (mean fraction)           0.0
-hits taken of those in the pattern's buckets (mean fraction)         0.4427770602204885
-mean squared pull of matched patterns about the truth line (median)  7.4477400482211795
-eta of pattern minus truth (mean)                                    -8.85411699039865e-05
-eta of pattern minus truth (std)                                     0.012662646168813059
-phi of pattern minus truth (mean; rad)                               -1.9932312833577536e-05
-phi of pattern minus truth (std; rad)                                0.02264355227037988
+hits taken of those in the pattern's buckets (mean fraction)         0.44053850107066916
+mean squared pull of matched patterns about the truth line (median)  7.972065312212864
+eta of pattern minus truth (mean)                                    -9.278168339515948e-05
+eta of pattern minus truth (std)                                     0.01273580942525591
+phi of pattern minus truth (mean; rad)                               -6.4938913961935465e-06
+phi of pattern minus truth (std; rad)                                0.02271375044664971
 
 /home/hoo/cern/acts-gpf-utilities/results/at-tdaq-mldev01/cpu_pg200_all/validation/scores.csv
