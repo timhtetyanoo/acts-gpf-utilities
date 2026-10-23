@@ -3,9 +3,9 @@
 
 The plotting package at gitlab.cern.ch/atlas-muon-software/houghidipuffvalidation
 reads a tree called `MuonFastRecoTest` whose branches are declared in
-MuonFastRecoValidTuple.h on the `LeonardoDev` branch. That tree is what Athena's
-MuonFastRecoTester writes, so producing it here lets the same executables plot
-the patterns the ACTS example found, with no change to either repository.
+MuonFastRecoValidTuple.h. That tree is what Athena's MuonFastRecoTester writes,
+so producing it here lets the same executables plot the patterns the ACTS
+example found, with no change to either repository.
 
 Only counts are written. Every threshold stays on the reading side, in
 MuonFastRecoValidTupleHelpers: `pat_truthMatched` lists every muon sharing a hit,

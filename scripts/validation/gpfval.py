@@ -222,9 +222,9 @@ def expanded_sector_pair(expanded):
 
 
 # --- the selection and the matching of MuonFastRecoValidation --------------
-# Transcribed from MuonFastRecoValidTuple.h on the LeonardoDev branch of
-# houghidipuffvalidation, so that the numbers here are the ones the plotting
-# package computes from the same patterns. Each function names its original.
+# Transcribed from MuonFastRecoValidTuple.h of houghidipuffvalidation, so that
+# the numbers here are the ones the plotting package computes from the same
+# patterns. Each function names its original.
 
 #: tpEtaMax and tpPtMin, the kinematic acceptance of a truth muon
 TP_ETA_MAX = 2.4

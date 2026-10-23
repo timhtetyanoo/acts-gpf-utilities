@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
 # Step 3, optional: the figures of MuonFastRecoValidation, the plotting package of
-# houghidipuffvalidation (branch LeonardoDev). It writes each run's n-tuple for
-# the package, validation/fastreco.root, from the tables of step 2, then runs the
-# executable. The n-tuple is rewritten only when the tables are newer than it.
+# houghidipuffvalidation. It writes each run's n-tuple for the package,
+# validation/fastreco.root, from the tables of step 2, then runs the executable.
+# The n-tuple is rewritten only when the tables are newer than it.
 #
 #   run_hough_plots.sh cpu_pg0_all                one run
 #   run_hough_plots.sh cpu_before cpu_after       several runs, one curve each
@@ -47,7 +47,7 @@ results_dir="$(gpf_results_dir "${repo_root}")"
 sample_text=""
 labels=""
 
-usage() { sed -n '2,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
+usage() { sed -n '2,37p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
 
 while (($#)); do
   case "$1" in

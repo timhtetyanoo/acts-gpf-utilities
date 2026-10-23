@@ -8,7 +8,7 @@ is Athena's, whose MuonFastRecoTester writes counts and defines no figure of
 merit from them.
 
 Three tables are written, and nothing is extracted that no test consumes. The
-definitions they serve are in docs/validation.md.
+definitions they serve are in docs/physics_performance.md.
 
     muons            one row per truth muon
     patterns         one row per pattern
