@@ -9,11 +9,11 @@ workspace:     half of the free GPU memory
 mdt seeds:     0
 inner seeds:   0
 build:         /home/hoo/cern/acts/build_cuda
-executable:    /home/hoo/cern/acts/build_cuda/bin/ActsUnitTestCudaGlobalPatternFinderData (2026-10-19 16:04:27)
+executable:    /home/hoo/cern/acts/build_cuda/bin/ActsUnitTestCudaGlobalPatternFinderData (2026-10-23 12:35:58)
 acts branch:   cuda-glob-pat-finder-v2
-acts revision: f62033097
-utilities rev: 7b29a7d
+acts revision: a3b9bb983
+utilities rev: 8f4021f
 host:          at-tdaq-mldev01
 gpu:           NVIDIA RTX A5000
-started:       2026-10-19 16:28:05
-finished:      2026-10-19 16:32:45
+started:       2026-10-23 14:12:27
+finished:      2026-10-23 14:17:08

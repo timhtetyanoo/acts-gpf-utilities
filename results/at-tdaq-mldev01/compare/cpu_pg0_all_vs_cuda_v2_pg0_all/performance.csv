@@ -1,14 +1,14 @@
 measure,cpu_pg0_all,cuda_v2_pg0_all,speedup (above 1: cuda_v2_pg0_all is faster)
-mean time per event (ms),4.026,1.275,3.16
-median time per event (ms),0.487,0.969,0.503
-p90 time per event (ms),1.448,1.554,0.932
-slowest event (ms),16390.0,1356.0,12.1
-median time per space point (ms),0.005708,0.01166,0.49
-throughput (events/s),248.4,784.6,3.16
-process wall time (s),229.4,89.99,
-CPU cores in use by the process (mean),0.9965,0.9953,
-peak memory of the process (MiB),2404.0,2542.0,
-GPU utilisation while busy (mean %),,70.87,
+mean time per event (ms),4.026,1.278,3.15
+median time per event (ms),0.487,0.972,0.501
+p90 time per event (ms),1.448,1.556,0.931
+slowest event (ms),16390.0,1355.0,12.1
+median time per space point (ms),0.005708,0.0117,0.488
+throughput (events/s),248.4,782.7,3.15
+process wall time (s),229.4,90.01,
+CPU cores in use by the process (mean),0.9965,0.9947,
+peak memory of the process (MiB),2404.0,2541.0,
+GPU utilisation while busy (mean %),,72.36,
 GPU memory used (peak MiB),,12340.0,
-GPU power while busy (mean W),,101.2,
-GPU SM clock while busy (median MHz),,1905.0,
+GPU power while busy (mean W),,99.79,
+GPU SM clock while busy (median MHz),,1920.0,
