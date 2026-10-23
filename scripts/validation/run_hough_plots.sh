@@ -28,6 +28,8 @@
 #
 #   --results-dir DIR    where the runs are kept (default: <this repo>/results/<host>)
 #   --sample-name TEXT   text of the plots' header (default: the sample of the run)
+#   --labels A,B,...     legend label of each run, in the order of the names
+#                        (default: the run names)
 #
 # Writes Efficiency/, Means/, Resolutions/ and dist/ below the output folder. The
 # muon plots, the resolutions and the charge, are empty: the finder produces no
@@ -43,13 +45,15 @@ source "${script_dir}/../gpf_common.sh"
 names=()
 results_dir="$(gpf_results_dir "${repo_root}")"
 sample_text=""
+labels=""
 
-usage() { sed -n '2,34p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
+usage() { sed -n '2,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1; }
 
 while (($#)); do
   case "$1" in
     --results-dir)  results_dir="${2:?}";  shift ;;
     --sample-name)  sample_text="${2:?}";  shift ;;
+    --labels)       labels="${2:?}";       shift ;;
     -h|--help)      usage ;;
     -*) echo "Unknown argument: $1" >&2; usage ;;
     *)  names+=("$1") ;;
@@ -71,14 +75,24 @@ python="${PYTHON:-python3}"
 env_setup="${GPF_ENV_SETUP:-${repo_root}/../env_setup.sh}"
 
 results_dir="$(cd -- "${results_dir}" && pwd)"
+label_list=()
+if [[ -n "${labels}" ]]; then
+  IFS=, read -r -a label_list <<<"${labels}"
+  if ((${#label_list[@]} != ${#names[@]})); then
+    echo "--labels has ${#label_list[@]} labels for ${#names[@]} runs." >&2
+    exit 1
+  fi
+fi
 inputs=()
+i=0
 for name in "${names[@]}"; do
   tables="${results_dir}/${name}/validation/tables"
   if [[ ! -d "${tables}" ]]; then
     echo "No ${tables}: run scripts/validation/run_validation.sh --name ${name} first." >&2
     exit 1
   fi
-  inputs+=("${name}=${results_dir}/${name}/validation/fastreco.root")
+  inputs+=("${label_list[i]:-${name}}=${results_dir}/${name}/validation/fastreco.root")
+  i=$((i + 1))
 done
 
 # --- several runs must have seen the same events ------------------------------
