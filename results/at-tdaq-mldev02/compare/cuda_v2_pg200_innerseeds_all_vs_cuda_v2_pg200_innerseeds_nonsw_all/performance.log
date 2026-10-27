@@ -1,0 +1,19 @@
+                               measure  cuda_v2_pg200_innerseeds_all  cuda_v2_pg200_innerseeds_nonsw_all  speedup (above 1: cuda_v2_pg200_innerseeds_nonsw_all is faster)
+              mean time per event (ms)                      6.359000                            3.221000                                                            1.970
+            median time per event (ms)                      5.855000                            2.679000                                                            2.190
+               p90 time per event (ms)                      8.126000                            4.221000                                                            1.930
+                    slowest event (ms)                   1153.000000                         1067.000000                                                            1.080
+      median time per space point (ms)                      0.000934                            0.000437                                                            2.140
+                 throughput (events/s)                    157.300000                          310.500000                                                            1.970
+       host before the GPU (median ms)                      0.428700                            0.436400                                                            0.982
+               copy to GPU (median ms)                      0.041540                            0.041340                                                            1.000
+               GPU kernels (median ms)                      4.979000                            1.997000                                                            2.490
+             copy from GPU (median ms)                      0.029730                            0.021970                                                            1.350
+        host after the GPU (median ms)                      0.306700                            0.124700                                                            2.460
+                 process wall time (s)                    259.700000                          219.900000                                                              NaN
+CPU cores in use by the process (mean)                      0.995500                            0.995900                                                              NaN
+      peak memory of the process (MiB)                   2691.000000                         2693.000000                                                              NaN
+   GPU utilisation while busy (mean %)                     27.220000                           14.260000                                                              NaN
+            GPU memory used (peak MiB)                  16420.000000                        16420.000000                                                              NaN
+         GPU power while busy (mean W)                     44.460000                           41.010000                                                              NaN
+  GPU SM clock while busy (median MHz)                   1155.000000                         1155.000000                                                              NaN

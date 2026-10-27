@@ -1,0 +1,17 @@
+name:          cuda_v2_pg200_innerseeds_nonsw_mdtseeds_all
+sample:        PG200
+ntuple:        /home/hoo/cern/acts-gpf-utilities/data/ParticleGun_MU200.root
+geometry:      /home/hoo/cern/acts-gpf-utilities/data/ActsTrackingGeometry_PG200.json
+events:        all
+repetitions:   1
+backend:       cuda
+workspace:     half of the free GPU memory
+build:         /home/hoo/cern/acts/build_cuda
+executable:    /home/hoo/cern/acts/build_cuda/bin/ActsUnitTestCudaGlobalPatternFinderData (2026-10-26 16:33:24)
+acts branch:   cuda-glob-pat-finder-v2-nsw
+acts revision: a3b9bb983 (+ local changes)
+utilities rev: a60936e
+host:          at-tdaq-mldev02
+gpu:           NVIDIA RTX 5000 Ada Generation
+started:       2026-10-26 16:43:53
+finished:      2026-10-26 16:48:42

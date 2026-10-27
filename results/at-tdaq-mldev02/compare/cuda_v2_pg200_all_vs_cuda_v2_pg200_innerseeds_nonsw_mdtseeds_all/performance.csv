@@ -1,0 +1,19 @@
+measure,cuda_v2_pg200_all,cuda_v2_pg200_innerseeds_nonsw_mdtseeds_all,speedup (above 1: cuda_v2_pg200_innerseeds_nonsw_mdtseeds_all is faster)
+mean time per event (ms),3.101,8.358,0.371
+median time per event (ms),2.557,7.843,0.326
+p90 time per event (ms),4.107,10.68,0.385
+slowest event (ms),1070.0,3063.0,0.349
+median time per space point (ms),0.0004175,0.001235,0.338
+throughput (events/s),322.5,119.7,0.371
+host before the GPU (median ms),0.4299,0.4309,0.998
+copy to GPU (median ms),0.03984,0.04198,0.949
+GPU kernels (median ms),1.9,6.963,0.273
+copy from GPU (median ms),0.02182,0.02819,0.774
+host after the GPU (median ms),0.1043,0.3087,0.338
+process wall time (s),212.4,283.1,
+CPU cores in use by the process (mean),0.9856,0.9963,
+peak memory of the process (MiB),2688.0,2719.0,
+GPU utilisation while busy (mean %),14.74,33.25,
+GPU memory used (peak MiB),16420.0,16420.0,
+GPU power while busy (mean W),41.07,46.95,
+GPU SM clock while busy (median MHz),1155.0,1155.0,
